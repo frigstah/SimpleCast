@@ -21,7 +21,7 @@ the separately bundled FFmpeg executable.
 - PowerShell `7.6.3`
 - Python `3.14.3`
 - PyInstaller `6.21.0`
-- Inno Setup 6
+- Inno Setup `6.7.3`
 - Dependency versions are pinned in `requirements.txt`.
 - Bundled encoder: `imageio-ffmpeg 0.6.0`, containing the gyan.dev FFmpeg 7.1
   essentials build
