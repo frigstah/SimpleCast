@@ -22,11 +22,14 @@ if ($LASTEXITCODE -ne 0) {
 
 $distRoot = Join-Path $projectRoot "dist\SimpleCast"
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination $distRoot
+Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination $distRoot
+Copy-Item -LiteralPath (Join-Path $projectRoot "TRADEMARKS.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\ROADMAP.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\CERTIFICATION.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\RELEASE_CHECKLIST.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\PRIVACY.md") -Destination $distRoot
+Copy-Item -LiteralPath (Join-Path $projectRoot "docs\BUILD_PROVENANCE_0.9.0.md") -Destination $distRoot
 
 $applicationHash = (Get-FileHash `
   -LiteralPath (Join-Path $distRoot "SimpleCast.exe") `
@@ -40,9 +43,20 @@ $ffmpegHash = if ($ffmpegBinary) {
 } else {
   "NOT FOUND"
 }
+$sourceRevision = (git -C $projectRoot rev-parse HEAD 2>$null)
+if ($LASTEXITCODE -ne 0 -or -not $sourceRevision) {
+  $sourceRevision = "UNKNOWN"
+}
+$sourceState = if (git -C $projectRoot status --porcelain 2>$null) {
+  "DIRTY"
+} else {
+  "CLEAN"
+}
 @(
   "SimpleCast version: $(python -c `"from simplecast import __version__; print(__version__)`")"
   "Build UTC: $([DateTime]::UtcNow.ToString('o'))"
+  "Source revision: $sourceRevision"
+  "Source working tree: $sourceState"
   "SimpleCast.exe SHA256: $applicationHash"
   "FFmpeg binary: $($ffmpegBinary.Name)"
   "FFmpeg SHA256: $ffmpegHash"

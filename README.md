@@ -221,12 +221,28 @@ its WDM-KS driver on the current test machine.
 - Added a repeatable real-time encoder soak tool with full post-run MP3 decode.
 - Added an automated release gate plus public-beta, privacy, licensing, signing,
   hardware, server, and endurance checklists.
-- Publisher signing, the application license decision, qualified FFmpeg review,
-  and the long-duration external matrix remain release gates.
+- The GPL-3.0-or-later license and unsigned-beta policy are now documented.
+  Qualified FFmpeg review and the long-duration external matrix remain gates.
 - Added the SIMP Windows application and installer icon.
 
 ## Distribution note
 
 The current prototype bundles a GPLv3-configured FFmpeg build. Read
-`THIRD_PARTY_NOTICES.md` and complete a licensing/signing review before public or
-commercial distribution.
+`THIRD_PARTY_NOTICES.md` and complete the FFmpeg corresponding-source review
+before public distribution.
+
+## License
+
+Copyright (C) 2026 SimpleCast contributors.
+
+SimpleCast is free software licensed under the GNU General Public License,
+version 3 or (at your option) any later version. See `LICENSE`.
+
+The SimpleCast and SIMP names and logo identify the official project. The GPL
+does not grant trademark rights or permission to imply that a modified build is
+an official SimpleCast release. See `TRADEMARKS.md`.
+
+The current beta binaries are intentionally unsigned. Windows may display a
+SmartScreen or Smart App Control warning; verify downloads using the published
+SHA-256 checksums. Build details are recorded in
+`docs/BUILD_PROVENANCE_0.9.0.md`.

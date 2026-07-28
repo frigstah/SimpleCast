@@ -37,7 +37,9 @@ Updated: 2026-07-29
 | Real-time synthetic MP3 encoder soak | Pass (15 seconds, 48 kHz stereo) |
 | Mixed-content processing and limiter | Pass |
 | Post-run full MP3 decode | Pass |
-| Packaged Authenticode signature | Open — publisher certificate required |
+| SimpleCast GPL-3.0-or-later license | Pass |
+| Packaged Authenticode signature | Intentional unsigned-beta warning |
+| SHA-256 and build provenance | Pass |
 
 The included soak tool supports longer 8, 24, and 72-hour runs. The short run
 above validates the harness and decode check; it does not replace the required
@@ -59,5 +61,5 @@ handles a requested pipe closure normally and explicitly closes all encoder pipe
 - Real SHOUTcast 1 server validation
 - Real SHOUTcast 2-compatible server validation
 - Installer upgrade/uninstall validation
-- Code signing and FFmpeg licensing review
-- Choose and publish the SimpleCast application license
+- Exact corresponding-source package for bundled FFmpeg and static libraries
+- Optional future Authenticode signing

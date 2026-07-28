@@ -97,9 +97,11 @@
 
 ## External release gates
 
-- Choose and publish the SimpleCast application license
+- GPL-3.0-or-later application license and branding policy (complete)
 - Complete qualified FFmpeg distribution/licensing review
-- Obtain publisher certificate and sign executable and installer
+- Publish exact corresponding source for the bundled FFmpeg/static libraries
+- Unsigned-beta warnings, checksums, and build provenance (complete)
+- Optional publisher signing for a later release
 - Complete Windows/server/hardware matrix and 8/24/72-hour field runs
 - Public beta distribution and feedback
 

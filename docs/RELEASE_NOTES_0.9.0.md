@@ -23,6 +23,7 @@ Windows internet-radio streamer for Icecast and SHOUTcast-compatible servers.
 - Optional Windows startup and automatic broadcast countdown
 - In-app beta-readiness and credential-redacted support reports
 - New SIMP application, taskbar, shortcut, and installer icon
+- SimpleCast source released under GNU GPL version 3 or later
 
 ## Verification
 
@@ -41,6 +42,9 @@ Windows internet-radio streamer for Icecast and SHOUTcast-compatible servers.
 - SHOUTcast 2 uses the legacy-source compatibility protocol, not native
   Ultravox 2.1.
 - FFmpeg and other third-party notices are included in the package.
+- SimpleCast source, build provenance, and SHA-256 checksums accompany the
+  binaries. The draft remains unpublished until the exact corresponding-source
+  package for the bundled GPLv3 FFmpeg build is complete.
 - Do not use the server connection test against an already active mount or
   stream ID because it briefly opens a source connection.
 
@@ -50,3 +54,10 @@ When reporting a problem, use **Export support report** in SimpleCast and review
 the generated text before attaching it. Password fields and common credential
 forms are redacted, but users should always inspect diagnostic files before
 sharing them publicly.
+
+## License and provenance
+
+SimpleCast is licensed under GNU GPL version 3 or later. The SimpleCast and SIMP
+names and logo identify the official project; see `TRADEMARKS.md`. Reproduction
+steps and the contents of the generated `COMPONENT_HASHES.txt` are documented in
+`docs/BUILD_PROVENANCE_0.9.0.md`.

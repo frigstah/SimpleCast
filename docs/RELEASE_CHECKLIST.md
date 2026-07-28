@@ -3,7 +3,7 @@
 ## Automated gate
 
 - Run `.\release-check.ps1 -SoakSeconds 1800` during beta preparation.
-- Run with `-RequireSigned` for a public release candidate.
+- Run with `-RequireSigned` only when the release policy requires signing.
 - Confirm all automated tests pass.
 - Confirm the generated MP3 decodes without errors.
 - Build both installer and portable packages.
@@ -40,12 +40,15 @@
 
 ## Distribution gate
 
-- Choose and publish the SimpleCast application license.
+- Include `LICENSE` and identify SimpleCast as GPL-3.0-or-later.
+- Include `TRADEMARKS.md` so official branding is distinct from code rights.
 - Have counsel or a qualified reviewer confirm the FFmpeg distribution plan.
-- Provide the exact corresponding FFmpeg source or a compliant written offer.
+- Provide exact corresponding FFmpeg and statically linked library source plus
+  build information alongside the network download.
 - Retain all third-party notices and license files.
-- Sign the executable and installer with an Authenticode certificate.
-- Confirm SmartScreen reputation strategy and timestamping.
+- For an unsigned beta, publish a prominent SmartScreen/Smart App Control
+  warning, SHA-256 checksums, and build provenance.
+- For a signed release, verify Authenticode, timestamping, and publisher details.
 - Test clean install, upgrade, uninstall, and portable removal.
 - Publish privacy information, known limitations, hashes, and support route.
 
