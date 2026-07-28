@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+build/
+dist/
+*.spec
+*.zip
+*.exe
+installer/output/
+SimpleCast-Windows-x64*/
+ui-smoke.png

@@ -1,0 +1,393 @@
+from __future__ import annotations
+
+import logging
+import ctypes
+import os
+import queue
+import threading
+import time
+import wave
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+import numpy as np
+import sounddevice as sd
+
+
+LevelCallback = Callable[..., None]
+
+AUDIO_SYSTEMS = (
+    "Automatic",
+    "Windows WASAPI (shared)",
+    "Windows DirectSound",
+    "Windows MME",
+)
+_audio_thread_state = threading.local()
+
+
+def _ensure_wasapi_thread() -> None:
+    """Initialise COM on the thread that opens a WASAPI stream."""
+    if os.name != "nt" or getattr(_audio_thread_state, "com_ready", False):
+        return
+    result = ctypes.windll.ole32.CoInitializeEx(None, 0x2)  # COINIT_APARTMENTTHREADED
+    # S_OK (0), S_FALSE (1), and RPC_E_CHANGED_MODE all mean COM is available
+    # on this thread. The latter means another apartment model was chosen first.
+    if result not in (0, 1, -2147417850):
+        raise OSError(f"Could not initialize Windows COM for WASAPI (0x{result & 0xFFFFFFFF:08X})")
+    _audio_thread_state.com_ready = True
+
+
+class GainControl:
+    def __init__(self, percent: int = 100) -> None:
+        self._lock = threading.Lock()
+        self._multiplier = 1.0
+        self.set_percent(percent)
+
+    def set_percent(self, percent: float) -> None:
+        with self._lock:
+            self._multiplier = max(0.0, min(2.0, float(percent) / 100.0))
+
+    @property
+    def multiplier(self) -> float:
+        with self._lock:
+            return self._multiplier
+
+    def apply(self, data: np.ndarray) -> np.ndarray:
+        return np.clip(data * self.multiplier, -1.0, 1.0)
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureOption:
+    index: int
+    channels: int
+    sample_rate: int
+    api_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class AudioDevice:
+    index: int
+    name: str
+    channels: int
+    sample_rate: int
+    api_name: str = "Windows WASAPI"
+    fallbacks: tuple[CaptureOption, ...] = ()
+
+    @property
+    def label(self) -> str:
+        channel_text = "mono" if self.channels == 1 else "stereo"
+        return f"{self.name} · {channel_text}"
+
+    @property
+    def capture_options(self) -> tuple[CaptureOption, ...]:
+        primary = CaptureOption(
+            self.index,
+            self.channels,
+            self.sample_rate,
+            self.api_name,
+        )
+        return (primary, *self.fallbacks)
+
+
+def list_input_devices() -> list[AudioDevice]:
+    host_apis = sd.query_hostapis()
+    all_devices = list(sd.query_devices())
+    groups: dict[str, list[CaptureOption]] = {}
+    for index, info in enumerate(all_devices):
+        if int(info["max_input_channels"]) <= 0:
+            continue
+        api_name = str(host_apis[int(info["hostapi"])]["name"])
+        if "WDM-KS" in api_name:
+            continue
+        name = str(info["name"])
+        groups.setdefault(name, []).append(
+            CaptureOption(
+                index=index,
+                channels=min(int(info["max_input_channels"]), 2),
+                sample_rate=int(info["default_samplerate"] or 48000),
+                api_name=api_name,
+            )
+        )
+
+    def priority(option: CaptureOption) -> int:
+        api = option.api_name.upper()
+        if "WASAPI" in api:
+            return 0
+        if "DIRECTSOUND" in api:
+            return 1
+        if "MME" in api:
+            return 2
+        return 3
+
+    devices: list[AudioDevice] = []
+    for name, options in groups.items():
+        ordered = sorted(options, key=priority)
+        primary = ordered[0]
+        devices.append(
+            AudioDevice(
+                index=primary.index,
+                name=name,
+                channels=primary.channels,
+                sample_rate=primary.sample_rate,
+                api_name=primary.api_name,
+                fallbacks=tuple(ordered[1:]),
+            )
+        )
+    return sorted(devices, key=lambda device: device.name.casefold())
+
+
+def _start_input_stream(
+    device: AudioDevice,
+    callback: Callable[[np.ndarray, int, object, object], None],
+    audio_system: str = "Automatic",
+) -> tuple[sd.InputStream, CaptureOption]:
+    requested = {
+        "Windows WASAPI (shared)": "WASAPI",
+        "Windows DirectSound": "DIRECTSOUND",
+        "Windows MME": "MME",
+    }.get(audio_system)
+    options = [
+        option
+        for option in device.capture_options
+        if requested is None or requested in option.api_name.upper()
+    ]
+    if not options:
+        raise sd.PortAudioError(
+            f"{audio_system} is not available for “{device.name}”. "
+            "Choose Automatic or another audio system."
+        )
+    if any("WASAPI" in option.api_name.upper() for option in options):
+        _ensure_wasapi_thread()
+    errors: list[str] = []
+    for option in options:
+        for attempt in range(2):
+            stream: sd.InputStream | None = None
+            try:
+                settings: dict[str, object] = {}
+                if "WASAPI" in option.api_name.upper():
+                    settings["extra_settings"] = sd.WasapiSettings(exclusive=False)
+                stream = sd.InputStream(
+                    device=option.index,
+                    channels=option.channels,
+                    samplerate=option.sample_rate,
+                    dtype="float32",
+                    blocksize=0 if "WASAPI" in option.api_name.upper() else 1024,
+                    callback=callback,
+                    **settings,
+                )
+                stream.start()
+                if option != options[0]:
+                    logging.warning(
+                        "Using %s fallback for audio device %s",
+                        option.api_name,
+                        device.name,
+                    )
+                else:
+                    logging.info(
+                        "Using %s for audio device %s",
+                        option.api_name,
+                        device.name,
+                    )
+                return stream, option
+            except sd.PortAudioError as error:
+                errors.append(f"{option.api_name}: {error}")
+                logging.warning(
+                    "%s open attempt %d failed for %s: %s",
+                    option.api_name,
+                    attempt + 1,
+                    device.name,
+                    error,
+                )
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except sd.PortAudioError:
+                        pass
+                if attempt == 0:
+                    time.sleep(0.25)
+    raise sd.PortAudioError(
+        "Could not open this audio device through any Windows audio API. "
+        + " | ".join(errors)
+    )
+
+
+class AudioEngine:
+    def __init__(self, gain: GainControl | None = None) -> None:
+        self._meter_stream: sd.InputStream | None = None
+        self._lock = threading.Lock()
+        self._operation_lock = threading.Lock()
+        self.gain = gain or GainControl()
+        self.active_api = ""
+
+    def start_meter(
+        self,
+        device: AudioDevice,
+        callback: LevelCallback,
+        audio_system: str = "Automatic",
+    ) -> None:
+        with self._operation_lock:
+            self._stop_meter_unlocked()
+
+            def receive(
+                data: np.ndarray,
+                _frames: int,
+                _time: object,
+                _status: object,
+            ) -> None:
+                if data.size == 0:
+                    return
+                adjusted = self.gain.apply(data)
+                rms = np.sqrt(
+                    np.mean(np.square(adjusted.astype(np.float64)), axis=0)
+                )
+                left = float(rms[0])
+                right = float(rms[1] if len(rms) > 1 else rms[0])
+                callback(
+                    left,
+                    right,
+                    float(np.max(np.abs(adjusted))),
+                )
+
+            stream, option = _start_input_stream(device, receive, audio_system)
+            with self._lock:
+                self._meter_stream = stream
+                self.active_api = _display_api(option.api_name)
+
+    def stop_meter(self) -> None:
+        with self._operation_lock:
+            self._stop_meter_unlocked()
+
+    def _stop_meter_unlocked(self) -> None:
+        with self._lock:
+            stream = self._meter_stream
+            self._meter_stream = None
+        if stream is not None:
+            try:
+                # abort() is intentionally used instead of stop(). Some Windows
+                # USB/WASAPI drivers wait indefinitely while draining a stream.
+                stream.abort()
+            finally:
+                stream.close()
+
+    def record_test(
+        self,
+        device: AudioDevice,
+        destination: Path,
+        seconds: int = 5,
+        progress: Callable[[int], None] | None = None,
+        audio_system: str = "Automatic",
+    ) -> tuple[float, float]:
+        self.stop_meter()
+        frames: list[np.ndarray] = []
+        started = time.monotonic()
+        last_remaining = seconds
+
+        def receive(data: np.ndarray, _frames: int, _time: object, _status: object) -> None:
+            frames.append(self.gain.apply(data))
+            if progress:
+                remaining = max(0, seconds - int(time.monotonic() - started))
+                nonlocal last_remaining
+                if remaining != last_remaining:
+                    last_remaining = remaining
+                    progress(remaining)
+
+        stream, option = _start_input_stream(device, receive, audio_system)
+        self.active_api = _display_api(option.api_name)
+        try:
+            sd.sleep(seconds * 1000)
+        finally:
+            try:
+                stream.abort()
+            finally:
+                stream.close()
+
+        data = (
+            np.concatenate(frames, axis=0)
+            if frames
+            else np.zeros((1, option.channels))
+        )
+        peak = np.max(np.abs(data), axis=0)
+        rms = np.sqrt(np.mean(np.square(data.astype(np.float64)), axis=0))
+        pcm = np.clip(data * 32767, -32768, 32767).astype("<i2")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(destination), "wb") as output:
+            output.setnchannels(option.channels)
+            output.setsampwidth(2)
+            output.setframerate(option.sample_rate)
+            output.writeframes(pcm.tobytes())
+        return float(np.max(rms)), float(np.max(peak))
+
+    @staticmethod
+    def play_file(path: Path) -> None:
+        with wave.open(str(path), "rb") as source:
+            channels = source.getnchannels()
+            sample_rate = source.getframerate()
+            frames = source.readframes(source.getnframes())
+        data = np.frombuffer(frames, dtype="<i2").reshape(-1, channels)
+        sd.play(data, sample_rate, blocking=True)
+
+
+class BroadcastAudioSource:
+    """Captures float audio and exposes signed 16-bit PCM blocks."""
+
+    def __init__(
+        self,
+        device: AudioDevice,
+        gain: GainControl | None = None,
+        audio_system: str = "Automatic",
+    ) -> None:
+        self.device = device
+        self.gain = gain or GainControl()
+        self.audio_system = audio_system
+        self.blocks: queue.Queue[bytes] = queue.Queue(maxsize=64)
+        self.stream: sd.InputStream | None = None
+        self.levels = (0.0, 0.0)
+        self.peak_level = 0.0
+        self.channels = device.channels
+        self.sample_rate = device.sample_rate
+        self.active_api = ""
+
+    def start(self) -> None:
+        def receive(data: np.ndarray, _frames: int, _time: object, _status: object) -> None:
+            adjusted = self.gain.apply(data)
+            rms = np.sqrt(
+                np.mean(np.square(adjusted.astype(np.float64)), axis=0)
+            )
+            self.levels = (
+                float(rms[0]),
+                float(rms[1] if len(rms) > 1 else rms[0]),
+            )
+            self.peak_level = float(np.max(np.abs(adjusted)))
+            pcm = (adjusted * 32767).astype("<i2").tobytes()
+            try:
+                self.blocks.put_nowait(pcm)
+            except queue.Full:
+                try:
+                    self.blocks.get_nowait()
+                    self.blocks.put_nowait(pcm)
+                except queue.Empty:
+                    pass
+
+        stream, option = _start_input_stream(
+            self.device,
+            receive,
+            self.audio_system,
+        )
+        self.stream = stream
+        self.channels = option.channels
+        self.sample_rate = option.sample_rate
+        self.active_api = _display_api(option.api_name)
+
+    def stop(self) -> None:
+        if self.stream:
+            stream = self.stream
+            self.stream = None
+            try:
+                stream.abort()
+            finally:
+                stream.close()
+
+
+def _display_api(api_name: str) -> str:
+    return "Windows WASAPI (shared)" if "WASAPI" in api_name.upper() else api_name
