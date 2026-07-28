@@ -10,9 +10,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable
 
-import imageio_ffmpeg
-
 from .audio import AudioDevice, BroadcastAudioSource, GainControl
+from .encoder import get_ffmpeg_exe
 from .processing import DEFAULT_PROCESSING_PRESET, filter_arguments
 
 
@@ -59,7 +58,7 @@ class Mp3FileWriter:
 
     def start(self, source_sample_rate: int, channels: int) -> None:
         command = [
-            imageio_ffmpeg.get_ffmpeg_exe(),
+            get_ffmpeg_exe(),
             "-hide_banner",
             "-loglevel",
             "warning",

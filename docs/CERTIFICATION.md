@@ -30,7 +30,7 @@ Updated: 2026-07-29
 
 | Check | Result |
 | --- | --- |
-| Automated test suite | Pass (44 tests) |
+| Automated test suite | Pass (46 tests) |
 | Processing-preview FFmpeg render | Pass (all four presets) |
 | Readiness FFmpeg capability detection | Pass |
 | Credential redaction regression test | Pass |
@@ -38,6 +38,7 @@ Updated: 2026-07-29
 | Mixed-content processing and limiter | Pass |
 | Post-run full MP3 decode | Pass |
 | SimpleCast GPL-3.0-or-later license | Pass |
+| Pinned LGPLv3 FFmpeg source/build record | Pass |
 | Packaged Authenticode signature | Intentional unsigned-beta warning |
 | SHA-256 and build provenance | Pass |
 
@@ -61,5 +62,4 @@ handles a requested pipe closure normally and explicitly closes all encoder pipe
 - Real SHOUTcast 1 server validation
 - Real SHOUTcast 2-compatible server validation
 - Installer upgrade/uninstall validation
-- Exact corresponding-source package for bundled FFmpeg and static libraries
 - Optional future Authenticode signing

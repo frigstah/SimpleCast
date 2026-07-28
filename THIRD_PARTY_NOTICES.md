@@ -5,36 +5,37 @@ is licensed under GNU GPL version 3 or later; see `LICENSE`.
 
 ## FFmpeg
 
-The packaged FFmpeg 7.1 binary is the gyan.dev essentials build configured as
-GPLv3 and statically includes external libraries such as LAME, x264, and x265.
-Its version/configuration can be inspected with:
+The packaged encoder is BtbN's reproducible FFmpeg 7.1 LGPL build:
+`ffmpeg-n7.1.5-10-g2aefd64d48-win64-lgpl-7.1`. SimpleCast invokes it as
+a separate executable. Its version and configuration can be inspected with:
 
 ```powershell
-.\_internal\imageio_ffmpeg\binaries\ffmpeg-win-x86_64-v7.1.exe -version
+.\_internal\vendor\ffmpeg\ffmpeg.exe -version
 ```
-
-The packaged application retains the `imageio-ffmpeg` license and binary README
-under `_internal\imageio_ffmpeg`.
 
 The packaged `COMPONENT_HASHES.txt` records the exact included FFmpeg binary:
 
-- Filename: `ffmpeg-win-x86_64-v7.1.exe`
+- Filename: `ffmpeg.exe`
 - SHA-256:
-  `2CE797A0F88D7F067180338FB227F7B1928EA727BD9A4D7A1D022F7C52AF71A3`
-- Configuration includes `--enable-gpl`, `--enable-version3`, static linking,
-  `libx264`, `libx265`, and `libmp3lame`.
+  `0C3883925185BDAB1454C896910E4CF77CB9A087AC6D2D264F803D35493B5360`
+- Configuration includes `--enable-version3`, `--disable-gpl`,
+  `--disable-nonfree`, static linking, and `libmp3lame`.
+- FFmpeg source revision: `2aefd64d48`
+- BtbN build-system revision:
+  `8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665`
+- Effective license: GNU Lesser General Public License version 3
 
-Before public distribution, publish the exact corresponding FFmpeg and
-statically linked library sources and the build information for this executable,
-or replace it with an encoder distribution whose corresponding-source package
-has been completed. A link to a newer generic FFmpeg source archive is not
-sufficient. This notice is an engineering compliance record, not legal advice;
-have the final plan reviewed by a qualified licensing professional.
+The FFmpeg license is retained under `_internal\vendor\ffmpeg\LICENSE.txt`.
+Exact source and build materials accompany the release as
+`SimpleCast-FFmpeg-Corresponding-Source-0.9.0.zip`.
 
 - FFmpeg legal information: https://ffmpeg.org/legal.html
-- FFmpeg source: https://ffmpeg.org/download.html
-- Binary provider: https://www.gyan.dev/ffmpeg/builds/
+- Pinned build scripts:
+  https://github.com/BtbN/FFmpeg-Builds/tree/autobuild-2026-07-28-13-32
+- Pinned FFmpeg source:
+  https://github.com/FFmpeg/FFmpeg/tree/2aefd64d48
 - SimpleCast build provenance: `BUILD_PROVENANCE_0.9.0.md`
+- Full encoder source record: `FFMPEG_SOURCE.md`
 
 ## Other components
 

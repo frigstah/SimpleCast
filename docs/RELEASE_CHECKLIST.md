@@ -42,9 +42,10 @@
 
 - Include `LICENSE` and identify SimpleCast as GPL-3.0-or-later.
 - Include `TRADEMARKS.md` so official branding is distinct from code rights.
-- Have counsel or a qualified reviewer confirm the FFmpeg distribution plan.
-- Provide exact corresponding FFmpeg and statically linked library source plus
-  build information alongside the network download.
+- Pin FFmpeg by immutable release, executable hash, source revision, and build
+  script revision.
+- Publish the FFmpeg LGPL license and corresponding source/build materials
+  alongside the network download.
 - Retain all third-party notices and license files.
 - For an unsigned beta, publish a prominent SmartScreen/Smart App Control
   warning, SHA-256 checksums, and build provenance.

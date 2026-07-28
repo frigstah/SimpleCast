@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import quote
 
-import imageio_ffmpeg
-
 from .audio import AudioDevice, BroadcastAudioSource, GainControl
+from .encoder import get_ffmpeg_exe
 from .models import ServerProfile
 from .processing import DEFAULT_PROCESSING_PRESET, filter_arguments
 from .recording import Mp3FileWriter
@@ -341,7 +340,7 @@ class StreamEngine:
         channels = preset.channels or source.channels
         if server.server_type.startswith("shoutcast"):
             command = [
-                imageio_ffmpeg.get_ffmpeg_exe(),
+                get_ffmpeg_exe(),
                 "-hide_banner",
                 "-loglevel",
                 "warning",
@@ -374,7 +373,7 @@ class StreamEngine:
         host = server.host.strip("[]")
         url = f"icecast://{user}:{secret}@{host}:{server.port}{server.mount}"
         command = [
-            imageio_ffmpeg.get_ffmpeg_exe(),
+            get_ffmpeg_exe(),
             "-hide_banner",
             "-loglevel",
             "warning",

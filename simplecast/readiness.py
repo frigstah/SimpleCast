@@ -7,9 +7,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-import imageio_ffmpeg
-
 from .audio import AudioDevice
+from .encoder import get_ffmpeg_exe
 from .models import AppConfig
 from .processing import PROCESSING_PRESETS
 from .streaming import QUALITY_PRESETS
@@ -32,7 +31,7 @@ def _writable_location(path: Path) -> bool:
 def _ffmpeg_capabilities() -> tuple[bool, str]:
     startup = subprocess.STARTUPINFO()
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    executable = imageio_ffmpeg.get_ffmpeg_exe()
+    executable = get_ffmpeg_exe()
     outputs: list[str] = []
     return_codes: list[int] = []
     for listing in ("-encoders", "-filters"):

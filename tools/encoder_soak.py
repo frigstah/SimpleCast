@@ -11,10 +11,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import imageio_ffmpeg
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from simplecast.encoder import get_ffmpeg_exe
 from simplecast.processing import PROCESSING_PRESETS
 from simplecast.recording import Mp3FileWriter
 
@@ -58,7 +57,7 @@ def run_soak(
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     decode = subprocess.run(
         [
-            imageio_ffmpeg.get_ffmpeg_exe(),
+            get_ffmpeg_exe(),
             "-hide_banner",
             "-loglevel",
             "error",

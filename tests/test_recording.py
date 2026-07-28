@@ -25,7 +25,7 @@ class RecordingPathTests(unittest.TestCase):
 
 class Mp3FileWriterTests(unittest.TestCase):
     @patch("simplecast.recording.subprocess.Popen")
-    @patch("simplecast.recording.imageio_ffmpeg.get_ffmpeg_exe")
+    @patch("simplecast.recording.get_ffmpeg_exe")
     def test_uses_320_kbps_and_selected_sample_rate(self, ffmpeg, popen) -> None:
         ffmpeg.return_value = "ffmpeg.exe"
         process = Mock()
@@ -53,7 +53,7 @@ class Mp3FileWriterTests(unittest.TestCase):
         process.wait.assert_called_once_with(timeout=3)
 
     @patch("simplecast.recording.subprocess.Popen")
-    @patch("simplecast.recording.imageio_ffmpeg.get_ffmpeg_exe")
+    @patch("simplecast.recording.get_ffmpeg_exe")
     def test_uses_same_processing_filter_for_local_recording(
         self,
         ffmpeg,

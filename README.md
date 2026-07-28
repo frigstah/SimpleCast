@@ -14,16 +14,18 @@ Requirements:
 
 - Windows 10 or 11
 - Python 3.11+
-- `sounddevice`, `numpy`, `imageio-ffmpeg`, and `keyring`
+- `sounddevice`, `numpy`, `keyring`, and the pinned FFmpeg build
 
 ```powershell
 python -m pip install -r requirements.txt
+.\prepare-ffmpeg.ps1
 python main.py
 ```
 
 ## Build the Windows executable
 
 ```powershell
+.\prepare-ffmpeg.ps1
 .\build.ps1
 ```
 
@@ -227,9 +229,9 @@ its WDM-KS driver on the current test machine.
 
 ## Distribution note
 
-The current prototype bundles a GPLv3-configured FFmpeg build. Read
-`THIRD_PARTY_NOTICES.md` and complete the FFmpeg corresponding-source review
-before public distribution.
+The Windows package includes a pinned FFmpeg 7.1 LGPLv3 executable with its
+license, immutable build record, and corresponding source materials. See
+`THIRD_PARTY_NOTICES.md` and `FFMPEG_SOURCE.md`.
 
 ## License
 

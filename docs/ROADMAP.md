@@ -98,8 +98,7 @@
 ## External release gates
 
 - GPL-3.0-or-later application license and branding policy (complete)
-- Complete qualified FFmpeg distribution/licensing review
-- Publish exact corresponding source for the bundled FFmpeg/static libraries
+- Pinned LGPLv3 FFmpeg license/source/build record (complete)
 - Unsigned-beta warnings, checksums, and build provenance (complete)
 - Optional publisher signing for a later release
 - Complete Windows/server/hardware matrix and 8/24/72-hour field runs

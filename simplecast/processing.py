@@ -5,8 +5,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-import imageio_ffmpeg
-
+from .encoder import get_ffmpeg_exe
 
 @dataclass(frozen=True, slots=True)
 class ProcessingPreset:
@@ -76,7 +75,7 @@ def process_test_file(
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     completed = subprocess.run(
         [
-            imageio_ffmpeg.get_ffmpeg_exe(),
+            get_ffmpeg_exe(),
             "-hide_banner",
             "-loglevel",
             "error",

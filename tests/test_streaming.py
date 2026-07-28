@@ -23,7 +23,7 @@ from simplecast.streaming import (
 
 class StreamCommandTests(unittest.TestCase):
     @patch("simplecast.streaming.subprocess.Popen")
-    @patch("simplecast.streaming.imageio_ffmpeg.get_ffmpeg_exe")
+    @patch("simplecast.streaming.get_ffmpeg_exe")
     def test_builds_secure_mp3_command(self, ffmpeg, popen) -> None:
         ffmpeg.return_value = "ffmpeg.exe"
         popen.return_value = object()
@@ -63,7 +63,7 @@ class StreamCommandTests(unittest.TestCase):
         resolver.assert_called_once_with(original)
 
     @patch("simplecast.streaming.subprocess.Popen")
-    @patch("simplecast.streaming.imageio_ffmpeg.get_ffmpeg_exe")
+    @patch("simplecast.streaming.get_ffmpeg_exe")
     def test_shoutcast_uses_mp3_stdout_encoder(self, ffmpeg, popen) -> None:
         ffmpeg.return_value = "ffmpeg.exe"
         popen.return_value = object()
@@ -81,7 +81,7 @@ class StreamCommandTests(unittest.TestCase):
         self.assertEqual(popen.call_args.kwargs["stdout"], -1)
 
     @patch("simplecast.streaming.subprocess.Popen")
-    @patch("simplecast.streaming.imageio_ffmpeg.get_ffmpeg_exe")
+    @patch("simplecast.streaming.get_ffmpeg_exe")
     def test_processing_preset_adds_live_audio_filter(
         self,
         ffmpeg,

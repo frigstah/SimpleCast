@@ -1,6 +1,5 @@
 sounddevice==0.5.5
 numpy==2.5.1
-imageio-ffmpeg==0.6.0
 keyring==25.7.0
 pyinstaller==6.21.0
 pystray==0.19.5

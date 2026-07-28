@@ -9,3 +9,7 @@ dist/
 installer/output/
 SimpleCast-Windows-x64*/
 ui-smoke.png
+ffmpeg-provider-*/
+ffmpeg-btbn-*/
+ffmpeg-source-work/
+release-source/

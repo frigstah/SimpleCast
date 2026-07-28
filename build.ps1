@@ -1,6 +1,14 @@
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
+$vendorEncoder = Join-Path $projectRoot "vendor\ffmpeg\ffmpeg.exe"
+$vendorLicense = Join-Path $projectRoot "vendor\ffmpeg\LICENSE.txt"
+if (
+  -not (Test-Path -LiteralPath $vendorEncoder) -or
+  -not (Test-Path -LiteralPath $vendorLicense)
+) {
+  throw "Run .\prepare-ffmpeg.ps1 before building SimpleCast."
+}
 
 python -m PyInstaller `
   --noconfirm `
@@ -10,9 +18,10 @@ python -m PyInstaller `
   --icon (Join-Path $projectRoot "assets\simplecast.ico") `
   --add-data "$projectRoot\assets\simplecast.ico;assets" `
   --add-data "$projectRoot\assets\simplecast-icon.png;assets" `
+  --add-binary "$vendorEncoder;vendor\ffmpeg" `
+  --add-data "$vendorLicense;vendor\ffmpeg" `
   --collect-all sounddevice `
   --collect-all keyring `
-  --collect-all imageio_ffmpeg `
   --collect-all pystray `
   --collect-all PIL `
   main.py
@@ -25,6 +34,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination $distRo
 Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "TRADEMARKS.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $distRoot
+Copy-Item -LiteralPath (Join-Path $projectRoot "FFMPEG_SOURCE.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\ROADMAP.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\CERTIFICATION.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\RELEASE_CHECKLIST.md") -Destination $distRoot
@@ -34,10 +44,9 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "docs\BUILD_PROVENANCE_0.9.0.md")
 $applicationHash = (Get-FileHash `
   -LiteralPath (Join-Path $distRoot "SimpleCast.exe") `
   -Algorithm SHA256).Hash
-$ffmpegBinary = Get-ChildItem `
-  -LiteralPath (Join-Path $distRoot "_internal\imageio_ffmpeg\binaries") `
-  -Filter "ffmpeg*.exe" |
-  Select-Object -First 1
+$ffmpegBinary = Get-Item -LiteralPath (
+  Join-Path $distRoot "_internal\vendor\ffmpeg\ffmpeg.exe"
+)
 $ffmpegHash = if ($ffmpegBinary) {
   (Get-FileHash -LiteralPath $ffmpegBinary.FullName -Algorithm SHA256).Hash
 } else {

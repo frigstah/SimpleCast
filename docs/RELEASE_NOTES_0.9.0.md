@@ -7,6 +7,8 @@ Windows internet-radio streamer for Icecast and SHOUTcast-compatible servers.
 
 - `SimpleCast-Setup-0.9.0-x64.exe` — per-user Windows installer
 - `SimpleCast-Windows-x64-v0.9.0-beta-portable.zip` — portable version
+- `SimpleCast-FFmpeg-Corresponding-Source-0.9.0.zip` — pinned FFmpeg source and
+  build materials
 - `SHA256SUMS-0.9.0.txt` — download verification hashes
 
 ## Highlights
@@ -27,7 +29,7 @@ Windows internet-radio streamer for Icecast and SHOUTcast-compatible servers.
 
 ## Verification
 
-- 44 automated tests pass.
+- 46 automated tests pass.
 - Every processing preset renders and decodes through bundled FFmpeg.
 - A real-time 48 kHz stereo encoder soak and full-file decode pass.
 - The packaged application opens through WASAPI and closes cleanly on the
@@ -43,8 +45,9 @@ Windows internet-radio streamer for Icecast and SHOUTcast-compatible servers.
   Ultravox 2.1.
 - FFmpeg and other third-party notices are included in the package.
 - SimpleCast source, build provenance, and SHA-256 checksums accompany the
-  binaries. The draft remains unpublished until the exact corresponding-source
-  package for the bundled GPLv3 FFmpeg build is complete.
+  binaries.
+- The pinned FFmpeg 7.1 LGPLv3 encoder includes its license, immutable build
+  record, and a corresponding-source package.
 - Do not use the server connection test against an already active mount or
   stream ID because it briefly opens a source connection.
 

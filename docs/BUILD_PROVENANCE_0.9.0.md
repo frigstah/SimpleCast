@@ -23,8 +23,10 @@ the separately bundled FFmpeg executable.
 - PyInstaller `6.21.0`
 - Inno Setup `6.7.3`
 - Dependency versions are pinned in `requirements.txt`.
-- Bundled encoder: `imageio-ffmpeg 0.6.0`, containing the gyan.dev FFmpeg 7.1
-  essentials build
+- Bundled encoder:
+  `ffmpeg-n7.1.5-10-g2aefd64d48-win64-lgpl-7.1`
+- FFmpeg revision `2aefd64d48`; BtbN build revision
+  `8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665`
 
 ## Reproduction
 
@@ -63,10 +65,10 @@ The beta artifacts are intentionally unsigned. Windows SmartScreen or Smart App
 Control may warn users. Verify the SHA-256 checksums before running either
 artifact.
 
-## FFmpeg compliance gate
+## FFmpeg source and license
 
-The bundled FFmpeg executable is GPLv3-configured and statically includes
-third-party libraries. Do not publish the draft release until exact corresponding
-source and build information for that executable are available alongside the
-binaries, or the encoder is replaced by a distribution with a completed,
-reviewed compliance package.
+The bundled FFmpeg executable is LGPLv3, includes its license, and is pinned by
+archive and executable hashes. The release includes
+`SimpleCast-FFmpeg-Corresponding-Source-0.9.0.zip`, containing the exact FFmpeg
+source revision, exact BtbN build scripts, and the dependency source manifest.
+See `FFMPEG_SOURCE.md`.
