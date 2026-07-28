@@ -22,6 +22,7 @@ Windows internet-radio streamer for Icecast and SHOUTcast-compatible servers.
 - Optional local 320 kbps MP3 recording
 - Optional Windows startup and automatic broadcast countdown
 - In-app beta-readiness and credential-redacted support reports
+- New SIMP application, taskbar, shortcut, and installer icon
 
 ## Verification
 

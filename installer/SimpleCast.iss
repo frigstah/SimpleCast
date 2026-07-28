@@ -20,6 +20,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=..\assets\simplecast.ico
 
 [Files]
 Source: "..\dist\SimpleCast\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

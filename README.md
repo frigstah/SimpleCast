@@ -223,6 +223,7 @@ its WDM-KS driver on the current test machine.
   hardware, server, and endurance checklists.
 - Publisher signing, the application license decision, qualified FFmpeg review,
   and the long-duration external matrix remain release gates.
+- Added the SIMP Windows application and installer icon.
 
 ## Distribution note
 

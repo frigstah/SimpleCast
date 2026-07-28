@@ -83,6 +83,17 @@ STARTUP_DELAYS = {
 }
 
 
+def _resource_path(*parts: str) -> Path:
+    base = Path(
+        getattr(
+            sys,
+            "_MEIPASS",
+            Path(__file__).resolve().parent.parent,
+        )
+    )
+    return base.joinpath(*parts)
+
+
 def _enable_windows_dpi_awareness() -> None:
     if platform.system() != "Windows":
         return
@@ -542,6 +553,14 @@ class SimpleCastApp(tk.Tk):
 
     def __init__(self) -> None:
         super().__init__()
+        try:
+            self.iconbitmap(
+                default=str(
+                    _resource_path("assets", "simplecast.ico")
+                )
+            )
+        except tk.TclError:
+            pass
         self.title(f"SimpleCast {__version__}")
         self.geometry("920x820")
         self.minsize(640, 520)

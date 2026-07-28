@@ -7,6 +7,9 @@ python -m PyInstaller `
   --clean `
   --windowed `
   --name SimpleCast `
+  --icon (Join-Path $projectRoot "assets\simplecast.ico") `
+  --add-data "$projectRoot\assets\simplecast.ico;assets" `
+  --add-data "$projectRoot\assets\simplecast-icon.png;assets" `
   --collect-all sounddevice `
   --collect-all keyring `
   --collect-all imageio_ffmpeg `
