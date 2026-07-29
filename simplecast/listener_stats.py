@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 import html
+import io
 import json
 import re
 import urllib.parse
@@ -72,6 +74,45 @@ def _icecast_listener_count(payload: str, mount: str) -> int:
     )
 
 
+def _icecast_legacy_listener_count(payload: str, mount: str) -> int:
+    """Read Icecast's standard status2.xsl CSV compatibility format."""
+
+    rows = list(csv.reader(io.StringIO(payload.lstrip("\ufeff"))))
+    header_index = -1
+    mount_column = -1
+    listeners_column = -1
+    for index, row in enumerate(rows):
+        normalized = [cell.strip().lower() for cell in row]
+        if (
+            "mountpoint" in normalized
+            and "current listeners" in normalized
+        ):
+            header_index = index
+            mount_column = normalized.index("mountpoint")
+            listeners_column = normalized.index("current listeners")
+            break
+    if header_index < 0:
+        raise ListenerStatsUnavailable(
+            "Icecast legacy statistics did not include the expected columns"
+        )
+
+    wanted_mount = urllib.parse.unquote(mount).rstrip("/") or "/"
+    required_column = max(mount_column, listeners_column)
+    for row in rows[header_index + 1:]:
+        if len(row) <= required_column:
+            continue
+        source_mount = (
+            urllib.parse.unquote(row[mount_column].strip()).rstrip("/")
+            or "/"
+        )
+        if source_mount == wanted_mount:
+            return _as_non_negative_int(row[listeners_column].strip())
+
+    raise ListenerStatsUnavailable(
+        f"Icecast legacy statistics did not list {mount}"
+    )
+
+
 def _find_shoutcast_listener_count(
     value: Any,
     stream_id: int,
@@ -138,12 +179,26 @@ def fetch_listener_count(
     scheme = "https" if server.use_tls else "http"
     base_url = f"{scheme}://{server.host}:{server.port}"
     if server.server_type == "icecast2":
-        payload = _request_text(
-            f"{base_url}/status-json.xsl",
-            timeout,
-            opener,
-        )
-        return _icecast_listener_count(payload, server.mount)
+        try:
+            payload = _request_text(
+                f"{base_url}/status-json.xsl",
+                timeout,
+                opener,
+            )
+            return _icecast_listener_count(payload, server.mount)
+        except Exception:
+            # Icecast versions before 2.4 do not provide status-json.xsl.
+            # Their standard status2.xsl transform exposes the same live
+            # mount count as CSV and is intended for machine consumption.
+            payload = _request_text(
+                f"{base_url}/status2.xsl",
+                timeout,
+                opener,
+            )
+            return _icecast_legacy_listener_count(
+                payload,
+                server.mount,
+            )
 
     if server.server_type == "shoutcast2":
         try:

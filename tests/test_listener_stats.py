@@ -79,7 +79,7 @@ class ListenerStatsTests(unittest.TestCase):
         self.assertEqual(fetch_listener_count(server, opener=opener), 8)
 
     def test_reports_when_icecast_mount_is_not_public(self) -> None:
-        opener, _urls = response_sequence(
+        opener, urls = response_sequence(
             """
             {
               "icestats": {
@@ -89,11 +89,52 @@ class ListenerStatsTests(unittest.TestCase):
                 }
               }
             }
+            """,
             """
+            Global,Clients:1,Sources:1,,0,,
+            MountPoint,Connections,Stream Name,Current Listeners,Description,Currently Playing,Stream URL
+            /other,1,Other,2,Description,Song,http://radio.example:8000/other
+            """,
         )
         server = ServerProfile(host="radio.example", mount="/live")
         with self.assertRaises(ListenerStatsUnavailable):
             fetch_listener_count(server, opener=opener)
+        self.assertEqual(
+            urls[-1],
+            "http://radio.example:8000/status2.xsl",
+        )
+
+    def test_falls_back_to_icecast_status2_csv(self) -> None:
+        opener, urls = response_sequence(
+            "<html>File not found</html>",
+            """
+            Global,Clients:1370,Sources:30,,0,,
+            MountPoint,Connections,Stream Name,Current Listeners,Description,Currently Playing,Stream URL
+            /other,10,Other station,4,Other stream,Artist - Song,http://radio.example:8000/other
+            /stream,27,"Frig, Radio",18,"Music, talk and more",Presenter,http://radio.example:8000/stream
+            """,
+        )
+        server = ServerProfile(host="radio.example", mount="/stream")
+        self.assertEqual(fetch_listener_count(server, opener=opener), 18)
+        self.assertEqual(
+            urls,
+            [
+                "http://radio.example:8000/status-json.xsl",
+                "http://radio.example:8000/status2.xsl",
+            ],
+        )
+
+    def test_status2_csv_accepts_a_byte_order_mark(self) -> None:
+        opener, _urls = response_sequence(
+            "not json",
+            (
+                "\ufeffMountPoint,Connections,Stream Name,Current Listeners,"
+                "Description,Currently Playing,Stream URL\n"
+                "/stream,1,Station,6,Description,Song,http://example/stream\n"
+            ),
+        )
+        server = ServerProfile(host="radio.example", mount="/stream")
+        self.assertEqual(fetch_listener_count(server, opener=opener), 6)
 
     def test_reads_shoutcast_2_json_stats(self) -> None:
         opener, urls = response_sequence(

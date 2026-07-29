@@ -133,7 +133,8 @@ shows **ON AIR**. To finish, press **STOP BROADCAST** and confirm.
 ### See your live listeners and personal best
 
 While a station is on air, SimpleCast checks its public listener statistics
-about every 10 seconds. The station row shows:
+about every 10 seconds. It supports current Icecast JSON statistics, the older
+Icecast status2 CSV format, and SHOUTcast statistics. The station row shows:
 
 - **Live listeners:** the latest count reported by the server
 - **Personal best:** the highest count SimpleCast has seen for that saved station
