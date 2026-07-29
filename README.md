@@ -52,6 +52,8 @@ adjacent `_internal` directory.
 - Manual now-playing metadata through the Icecast or SHOUTcast admin endpoint
 - Automatic now-playing metadata from a watched text file
 - Independent metadata retries and automatic resend after server reconnect
+- Live listener counts for active Icecast and SHOUTcast destinations
+- A persistent personal listener high for every saved station profile
 - Local 320 kbps MP3 recording during a broadcast or as a recording-only session
 - Timestamped recording files with live duration and file-size status
 - Optional Windows startup, minimized tray launch, and automatic broadcasting

@@ -21,6 +21,7 @@ class ServerProfile:
     description: str = ""
     genre: str = ""
     website: str = ""
+    personal_listener_peak: int = 0
 
     def normalized(self) -> "ServerProfile":
         self.host = self.host.strip()
@@ -36,6 +37,13 @@ class ServerProfile:
             self.mount = ""
         self.port = int(self.port)
         self.stream_id = max(1, int(self.stream_id))
+        try:
+            self.personal_listener_peak = max(
+                0,
+                int(self.personal_listener_peak),
+            )
+        except (TypeError, ValueError):
+            self.personal_listener_peak = 0
         return self
 
     def validate(self) -> list[str]:
@@ -66,6 +74,15 @@ class ServerProfile:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def observe_listener_count(self, count: int) -> bool:
+        """Record a new personal peak and report whether it changed."""
+
+        count = max(0, int(count))
+        if count <= self.personal_listener_peak:
+            return False
+        self.personal_listener_peak = count
+        return True
 
 
 @dataclass(slots=True)

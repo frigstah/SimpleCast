@@ -145,6 +145,25 @@ class ServerProfileTests(unittest.TestCase):
         self.assertFalse(config.select_only_server("missing"))
         self.assertEqual(config.enabled_server_ids, [second.id])
 
+    def test_personal_listener_peak_is_persisted_and_repaired(self) -> None:
+        server = ServerProfile(
+            host="radio.example",
+            personal_listener_peak=42,
+        )
+        loaded = ServerProfile.from_dict(server.to_dict())
+        self.assertEqual(loaded.personal_listener_peak, 42)
+        repaired = ServerProfile.from_dict(
+            {
+                "host": "radio.example",
+                "personal_listener_peak": -5,
+            }
+        )
+        self.assertEqual(repaired.personal_listener_peak, 0)
+        self.assertTrue(loaded.observe_listener_count(47))
+        self.assertEqual(loaded.personal_listener_peak, 47)
+        self.assertFalse(loaded.observe_listener_count(20))
+        self.assertEqual(loaded.personal_listener_peak, 47)
+
 
 class ConfigStoreTests(unittest.TestCase):
     def test_round_trip_does_not_contain_password(self) -> None:

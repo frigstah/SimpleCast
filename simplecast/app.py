@@ -24,6 +24,7 @@ from .audio import (
 from .config_store import ConfigStore
 from .diagnostics import DiagnosticStep, run_server_diagnostic
 from .logging_setup import configure_logging
+from .listener_stats import fetch_listener_count
 from .metadata import (
     METADATA_FORMATS,
     MetadataDeliveryEngine,
@@ -419,6 +420,7 @@ class ServerDialog(tk.Toplevel):
             description=self.variables["description"].get(),
             genre=self.variables["genre"].get(),
             website=self.variables["website"].get(),
+            personal_listener_peak=self.profile.personal_listener_peak,
         ).normalized()
         errors = profile.validate()
         if errors:
@@ -433,12 +435,12 @@ class ServerManager(tk.Toplevel):
         super().__init__(parent)
         self.app = parent
         self.title("Manage stations")
-        self.geometry("760x470")
+        self.geometry("880x470")
         self.configure(background=COLORS["bg"])
         self.transient(parent)
         self._build()
         self.refresh()
-        _fit_window(self, 760, 470, 560, 400)
+        _fit_window(self, 880, 470, 660, 400)
 
     def _build(self) -> None:
         frame = ttk.Frame(self, padding=24)
@@ -459,7 +461,14 @@ class ServerManager(tk.Toplevel):
         ).pack(anchor="w", pady=(4, 16))
         self.tree = ttk.Treeview(
             frame,
-            columns=("name", "favorite", "type", "address", "status"),
+            columns=(
+                "name",
+                "favorite",
+                "type",
+                "address",
+                "listeners",
+                "status",
+            ),
             show="headings",
             selectmode="browse",
         )
@@ -467,11 +476,13 @@ class ServerManager(tk.Toplevel):
         self.tree.heading("favorite", text="FAVORITE")
         self.tree.heading("type", text="CONNECTION")
         self.tree.heading("address", text="ADDRESS")
+        self.tree.heading("listeners", text="PERSONAL HIGH")
         self.tree.heading("status", text="BROADCAST")
         self.tree.column("name", width=145)
         self.tree.column("favorite", width=78, anchor="center")
         self.tree.column("type", width=105)
-        self.tree.column("address", width=225)
+        self.tree.column("address", width=205)
+        self.tree.column("listeners", width=105, anchor="center")
         self.tree.column("status", width=95, anchor="center")
         self.tree.pack(fill="both", expand=True)
         self.tree.bind("<Double-1>", lambda _event: self.edit())
@@ -531,7 +542,14 @@ class ServerManager(tk.Toplevel):
                 "",
                 "end",
                 iid=server.id,
-                values=(server.name, favorite, connection, address, selected),
+                values=(
+                    server.name,
+                    favorite,
+                    connection,
+                    address,
+                    server.personal_listener_peak,
+                    selected,
+                ),
             )
         if self.app.config.selected_server_id in self.tree.get_children():
             self.tree.selection_set(self.app.config.selected_server_id)
@@ -693,6 +711,9 @@ class SimpleCastApp(tk.Tk):
         self.auto_metadata_title = ""
         self.metadata_generation = 0
         self.metadata_delivery_results: dict[str, bool | None] = {}
+        self.listener_counts: dict[str, int] = {}
+        self.listener_errors: dict[str, str] = {}
+        self._listener_polling: set[str] = set()
         self.tray = TrayController(
             lambda: self.after(0, self.show_window),
             lambda: self.after(0, self._tray_toggle_broadcast),
@@ -729,6 +750,7 @@ class SimpleCastApp(tk.Tk):
             logging.exception("Could not start the Windows tray icon")
         self.after(500, self._update_timer)
         self.after(50, self._poll_meter_levels)
+        self.after(1200, self._poll_listener_stats)
         self.after(400, self._apply_launch_automation)
 
     def _configure_styles(self) -> None:
@@ -1431,6 +1453,7 @@ class SimpleCastApp(tk.Tk):
         self.server_status_frame = ttk.Frame(stream, style="Card.TFrame")
         self.server_status_frame.pack(fill="x", pady=(6, 0))
         self.server_status_labels: dict[str, tuple[ttk.Label, ttk.Label]] = {}
+        self.listener_status_labels: dict[str, ttk.Label] = {}
         self.test_server_button = ttk.Button(
             stream,
             text="Test connection",
@@ -2655,6 +2678,7 @@ class SimpleCastApp(tk.Tk):
         for child in self.server_status_frame.winfo_children():
             child.destroy()
         self.server_status_labels = {}
+        self.listener_status_labels = {}
         enabled = self.config.enabled_servers()
         selected = self.config.selected_server()
         if enabled:
@@ -2674,23 +2698,32 @@ class SimpleCastApp(tk.Tk):
                     style="Card.TFrame",
                 )
                 row.pack(fill="x", pady=2)
+                status_row = ttk.Frame(row, style="Card.TFrame")
+                status_row.pack(fill="x")
                 name_label = ttk.Label(
-                    row,
+                    status_row,
                     text=f"●  {server.name}",
                     foreground=COLORS["offline"],
                     style="Card.TLabel",
                 )
                 name_label.pack(side="left")
                 status_label = ttk.Label(
-                    row,
+                    status_row,
                     text="Ready",
                     style="CardMuted.TLabel",
                 )
                 status_label.pack(side="right")
+                listener_label = ttk.Label(
+                    row,
+                    text=self._listener_status_text(server),
+                    style="CardMuted.TLabel",
+                )
+                listener_label.pack(anchor="w", padx=(14, 0))
                 self.server_status_labels[server.id] = (
                     name_label,
                     status_label,
                 )
+                self.listener_status_labels[server.id] = listener_label
             self.test_server_button.configure(
                 state="normal" if selected else "disabled"
             )
@@ -2925,6 +2958,116 @@ class SimpleCastApp(tk.Tk):
         except RuntimeError:
             pass
 
+    def _listener_status_text(self, server: ServerProfile) -> str:
+        count = self.listener_counts.get(server.id)
+        if count is not None:
+            current = str(count)
+        elif server.id in self.listener_errors:
+            current = "unavailable"
+        else:
+            current = "—"
+        return (
+            f"Live listeners: {current}  ·  "
+            f"Personal best: {server.personal_listener_peak}"
+        )
+
+    def _refresh_listener_status(self, server_id: str) -> None:
+        label = self.listener_status_labels.get(server_id)
+        server = next(
+            (
+                item
+                for item in self.config.servers
+                if item.id == server_id
+            ),
+            None,
+        )
+        if label is not None and server is not None:
+            label.configure(
+                text=self._listener_status_text(server),
+                foreground=(
+                    COLORS["accent"]
+                    if server_id in self.listener_counts
+                    else COLORS["muted"]
+                ),
+            )
+
+    def _start_listener_poll(self, server: ServerProfile) -> None:
+        if server.id in self._listener_polling or self._closing:
+            return
+        self._listener_polling.add(server.id)
+
+        def fetch() -> None:
+            try:
+                count = fetch_listener_count(server)
+                error = ""
+            except Exception as problem:
+                count = None
+                error = str(problem) or "Listener statistics are unavailable"
+            try:
+                self.after(
+                    0,
+                    lambda: self._apply_listener_result(
+                        server.id,
+                        count,
+                        error,
+                    ),
+                )
+            except RuntimeError:
+                self._listener_polling.discard(server.id)
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _poll_listener_stats(self) -> None:
+        if self._closing:
+            return
+        online_ids = set(self.stream.online_server_ids)
+        known_ids = set(self.listener_counts) | set(self.listener_errors)
+        for server_id in known_ids - online_ids:
+            self.listener_counts.pop(server_id, None)
+            self.listener_errors.pop(server_id, None)
+            self._refresh_listener_status(server_id)
+        for server in self.config.servers:
+            if server.id in online_ids:
+                self._start_listener_poll(server)
+        self.after(10_000, self._poll_listener_stats)
+
+    def _apply_listener_result(
+        self,
+        server_id: str,
+        count: int | None,
+        error: str,
+    ) -> None:
+        self._listener_polling.discard(server_id)
+        server = next(
+            (
+                item
+                for item in self.config.servers
+                if item.id == server_id
+            ),
+            None,
+        )
+        if server is None:
+            return
+        if server_id not in set(self.stream.online_server_ids):
+            self.listener_counts.pop(server_id, None)
+            self.listener_errors.pop(server_id, None)
+            self._refresh_listener_status(server_id)
+            return
+        if count is None:
+            self.listener_counts.pop(server_id, None)
+            self.listener_errors[server_id] = error
+            logging.debug(
+                "Listener statistics unavailable for %s: %s",
+                server.name,
+                error,
+            )
+        else:
+            self.listener_counts[server_id] = count
+            self.listener_errors.pop(server_id, None)
+            if server.observe_listener_count(count):
+                self.save_config()
+        self._refresh_listener_status(server_id)
+
     def _apply_server_stream_state(
         self,
         server_id: str,
@@ -2947,6 +3090,21 @@ class SimpleCastApp(tk.Tk):
             text=detail if len(detail) <= 72 else f"{detail[:69]}…",
             foreground=colors[state],
         )
+        if state == BroadcastState.ON_AIR:
+            server = next(
+                (
+                    item
+                    for item in self.config.servers
+                    if item.id == server_id
+                ),
+                None,
+            )
+            if server is not None:
+                self.after(250, lambda: self._start_listener_poll(server))
+        else:
+            self.listener_counts.pop(server_id, None)
+            self.listener_errors.pop(server_id, None)
+            self._refresh_listener_status(server_id)
         if (
             state == BroadcastState.ON_AIR
             and self.config.metadata_auto
@@ -2999,6 +3157,8 @@ class SimpleCastApp(tk.Tk):
         except Exception:
             logging.exception("Could not update the tray status")
         if state == BroadcastState.OFFLINE:
+            self.listener_counts.clear()
+            self.listener_errors.clear()
             self.metadata_generation = self.metadata_delivery.cancel()
             if self.config.metadata_auto and self.auto_metadata_title:
                 self.metadata_status_label.configure(
@@ -3014,6 +3174,8 @@ class SimpleCastApp(tk.Tk):
                     text="Ready",
                     foreground=COLORS["muted"],
                 )
+            for server_id in self.listener_status_labels:
+                self._refresh_listener_status(server_id)
             self.broadcast_button.configure(
                 state="normal",
                 text="▶  START BROADCAST",

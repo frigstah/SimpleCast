@@ -130,6 +130,20 @@ Before going live, check that:
 Press **START BROADCAST**. The status changes while SimpleCast connects and then
 shows **ON AIR**. To finish, press **STOP BROADCAST** and confirm.
 
+### See your live listeners and personal best
+
+While a station is on air, SimpleCast checks its public listener statistics
+about every 10 seconds. The station row shows:
+
+- **Live listeners:** the latest count reported by the server
+- **Personal best:** the highest count SimpleCast has seen for that saved station
+
+The personal best is kept after SimpleCast closes and is also shown for every
+saved station under **Manage stations**. Because the count is sampled, a very
+short listener spike between checks may not be recorded. If a radio host blocks
+public statistics, SimpleCast shows **unavailable** and keeps broadcasting
+normally.
+
 ## Optional recording
 
 Open **Recordings** in the sidebar to:
