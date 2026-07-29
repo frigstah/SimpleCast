@@ -30,7 +30,7 @@ Updated: 2026-07-29
 
 | Check | Result |
 | --- | --- |
-| Automated test suite | Pass (66 tests) |
+| Automated test suite | Pass (67 tests) |
 | Processing-preview FFmpeg render | Pass (all four presets) |
 | Readiness FFmpeg capability detection | Pass |
 | Credential redaction regression test | Pass |

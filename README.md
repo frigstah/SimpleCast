@@ -41,6 +41,9 @@ adjacent `_internal` directory.
 - Live stereo level meter with quiet and clipping guidance
 - Five-second original/processed record-and-playback sound check
 - Named Icecast 2, SHOUTcast 1, and SHOUTcast 2-compatible server profiles
+- Dashboard server dropdown with direct Add, Edit, Delete, and advanced Manage
+  stations actions
+- Six persistent favorite-station shortcuts
 - Simultaneous broadcasting to multiple included server profiles
 - TLS, host, port, mount, username, password, and SHOUTcast SID support
 - Password storage through Windows Credential Manager
@@ -62,6 +65,8 @@ adjacent `_internal` directory.
 - Sanitized support-report export
 - In-app beta-readiness check for audio, encoder, folders, stations, and signing
 - User-initiated GitHub update checks with verified installer downloads
+- Three persistent appearance themes: Modern & sleek, Classic SimpleCast, and
+  Beginner friendly
 - Repeatable real-time MP3 encoder soak and release-check tooling
 
 ## Current limitations

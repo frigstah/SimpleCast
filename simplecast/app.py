@@ -63,25 +63,107 @@ from .updater import (
 from .windows import SleepPreventer
 
 
-COLORS = {
-    "bg": "#0b1422",
-    "surface": "#142238",
-    "surface_alt": "#1c2f49",
-    "surface_hover": "#263d5b",
-    "input": "#0d1b2d",
-    "input_hover": "#132842",
-    "disabled": "#17263a",
-    "disabled_text": "#71839a",
-    "line": "#355170",
-    "text": "#f5f7fb",
-    "muted": "#adbed2",
-    "accent": "#55ddb0",
-    "accent_hover": "#73e9c2",
-    "accent_dark": "#123a34",
-    "warning": "#f6c85f",
-    "error": "#ff6b7a",
-    "offline": "#93a4b8",
+THEMES = {
+    "Modern & sleek": {
+        "description": (
+            "A restrained charcoal interface with crisp cyan highlights "
+            "and compact controls."
+        ),
+        "font_size": 10,
+        "button_padding": (13, 7),
+        "colors": {
+            "bg": "#0b0f14",
+            "surface": "#141a22",
+            "surface_alt": "#202833",
+            "surface_hover": "#2b3644",
+            "input": "#0d131a",
+            "input_hover": "#17202a",
+            "disabled": "#1a2028",
+            "disabled_text": "#697583",
+            "line": "#344253",
+            "text": "#f6f8fa",
+            "muted": "#aab5c1",
+            "accent": "#4dd7e5",
+            "accent_hover": "#79e4ee",
+            "accent_dark": "#12383e",
+            "warning": "#f6c85f",
+            "error": "#ff6b7a",
+            "offline": "#8d9aa8",
+            "sidebar": "#080c11",
+            "sidebar_text": "#f6f8fa",
+            "sidebar_muted": "#9eabb8",
+            "sidebar_accent": "#4dd7e5",
+            "accent_text": "#071d17",
+            "error_text": "#2d0710",
+        },
+    },
+    "Classic SimpleCast": {
+        "description": (
+            "The familiar SimpleCast navy design used in earlier beta releases."
+        ),
+        "font_size": 10,
+        "button_padding": (14, 8),
+        "colors": {
+            "bg": "#0b1422",
+            "surface": "#142238",
+            "surface_alt": "#1c2f49",
+            "surface_hover": "#263d5b",
+            "input": "#0d1b2d",
+            "input_hover": "#132842",
+            "disabled": "#17263a",
+            "disabled_text": "#71839a",
+            "line": "#355170",
+            "text": "#f5f7fb",
+            "muted": "#adbed2",
+            "accent": "#55ddb0",
+            "accent_hover": "#73e9c2",
+            "accent_dark": "#123a34",
+            "warning": "#f6c85f",
+            "error": "#ff6b7a",
+            "offline": "#93a4b8",
+            "sidebar": "#0a1828",
+            "sidebar_text": "#f5f7fb",
+            "sidebar_muted": "#adbed2",
+            "sidebar_accent": "#55ddb0",
+            "accent_text": "#09201a",
+            "error_text": "#2d0710",
+        },
+    },
+    "Beginner friendly": {
+        "description": (
+            "A bright, high-contrast layout with larger text and roomier controls."
+        ),
+        "font_size": 11,
+        "button_padding": (15, 10),
+        "colors": {
+            "bg": "#edf3f8",
+            "surface": "#ffffff",
+            "surface_alt": "#dce8f2",
+            "surface_hover": "#cbddea",
+            "input": "#f8fbfd",
+            "input_hover": "#ffffff",
+            "disabled": "#e4e9ee",
+            "disabled_text": "#788592",
+            "line": "#8da5b8",
+            "text": "#152332",
+            "muted": "#4d6274",
+            "accent": "#168d72",
+            "accent_hover": "#20a987",
+            "accent_dark": "#c8eee4",
+            "warning": "#b57900",
+            "error": "#c8364b",
+            "offline": "#617487",
+            "sidebar": "#17324b",
+            "sidebar_text": "#ffffff",
+            "sidebar_muted": "#c8d8e6",
+            "sidebar_accent": "#79e4c5",
+            "accent_text": "#ffffff",
+            "error_text": "#ffffff",
+        },
+    },
 }
+
+COLORS = dict(THEMES["Classic SimpleCast"]["colors"])
 
 SAMPLE_RATES = {
     "32 kHz": 32000,
@@ -663,6 +745,11 @@ class SimpleCastApp(tk.Tk):
 
     def __init__(self) -> None:
         super().__init__()
+        self.log_path = configure_logging()
+        self.store = ConfigStore()
+        self.config = self.store.load()
+        COLORS.clear()
+        COLORS.update(THEMES[self.config.ui_theme]["colors"])
         try:
             self.iconbitmap(
                 default=str(
@@ -676,9 +763,6 @@ class SimpleCastApp(tk.Tk):
         self.minsize(880, 620)
         self.configure(background=COLORS["bg"])
         self.protocol("WM_DELETE_WINDOW", self.close)
-        self.log_path = configure_logging()
-        self.store = ConfigStore()
-        self.config = self.store.load()
         self.gain = GainControl(self.config.input_volume_percent)
         self.audio = AudioEngine(self.gain)
         self.devices: list[AudioDevice] = []
@@ -764,6 +848,9 @@ class SimpleCastApp(tk.Tk):
     def _configure_styles(self) -> None:
         style = ttk.Style(self)
         style.theme_use("clam")
+        theme = THEMES[self.config.ui_theme]
+        font_size = int(theme["font_size"])
+        button_padding = theme["button_padding"]
 
         # The combobox popup is a classic Tk Listbox, not a ttk widget. Its
         # palette must be configured separately or Windows can use light system
@@ -776,28 +863,28 @@ class SimpleCastApp(tk.Tk):
         )
         self.option_add(
             "*TCombobox*Listbox.selectForeground",
-            "#071d17",
+            COLORS["accent_text"],
         )
-        self.option_add("*TCombobox*Listbox.font", ("Segoe UI", 10))
+        self.option_add("*TCombobox*Listbox.font", ("Segoe UI", font_size))
         self.option_add("*TCombobox*Listbox.relief", "flat")
         self.option_add("*TCombobox*Listbox.borderWidth", 0)
 
-        style.configure(".", font=("Segoe UI", 10), background=COLORS["bg"])
+        style.configure(".", font=("Segoe UI", font_size), background=COLORS["bg"])
         style.configure("TFrame", background=COLORS["bg"])
         style.configure("Card.TFrame", background=COLORS["surface"])
-        style.configure("Sidebar.TFrame", background="#0a1828")
+        style.configure("Sidebar.TFrame", background=COLORS["sidebar"])
         style.configure(
             "TLabel", background=COLORS["bg"], foreground=COLORS["text"]
         )
         style.configure(
             "Sidebar.TLabel",
-            background="#0a1828",
-            foreground=COLORS["text"],
+            background=COLORS["sidebar"],
+            foreground=COLORS["sidebar_text"],
         )
         style.configure(
             "SidebarMuted.TLabel",
-            background="#0a1828",
-            foreground=COLORS["muted"],
+            background=COLORS["sidebar"],
+            foreground=COLORS["sidebar_muted"],
         )
         style.configure(
             "Card.TLabel", background=COLORS["surface"], foreground=COLORS["text"]
@@ -848,7 +935,7 @@ class SimpleCastApp(tk.Tk):
             background=COLORS["surface_alt"],
             foreground=COLORS["text"],
             borderwidth=0,
-            padding=(14, 8),
+            padding=button_padding,
             relief="flat",
         )
         style.map(
@@ -865,8 +952,8 @@ class SimpleCastApp(tk.Tk):
         )
         style.configure(
             "Nav.TButton",
-            background="#0a1828",
-            foreground=COLORS["muted"],
+            background=COLORS["sidebar"],
+            foreground=COLORS["sidebar_muted"],
             anchor="w",
             font=("Segoe UI Semibold", 11),
             padding=(18, 13),
@@ -878,14 +965,14 @@ class SimpleCastApp(tk.Tk):
                 ("pressed", COLORS["surface_alt"]),
             ],
             foreground=[
-                ("active", COLORS["accent"]),
-                ("!disabled", COLORS["muted"]),
+                ("active", COLORS["sidebar_accent"]),
+                ("!disabled", COLORS["sidebar_muted"]),
             ],
         )
         style.configure(
             "NavActive.TButton",
             background=COLORS["surface_alt"],
-            foreground=COLORS["accent"],
+            foreground=COLORS["sidebar_accent"],
             anchor="w",
             font=("Segoe UI Semibold", 11),
             padding=(18, 13),
@@ -893,7 +980,7 @@ class SimpleCastApp(tk.Tk):
         style.map(
             "NavActive.TButton",
             background=[("active", COLORS["surface_hover"])],
-            foreground=[("!disabled", COLORS["accent"])],
+            foreground=[("!disabled", COLORS["sidebar_accent"])],
         )
         style.configure(
             "Favorite.TButton",
@@ -935,7 +1022,7 @@ class SimpleCastApp(tk.Tk):
         style.configure(
             "Accent.TButton",
             background=COLORS["accent"],
-            foreground="#09201a",
+            foreground=COLORS["accent_text"],
             font=("Segoe UI Semibold", 10),
         )
         style.map(
@@ -947,13 +1034,13 @@ class SimpleCastApp(tk.Tk):
             ],
             foreground=[
                 ("disabled", COLORS["disabled_text"]),
-                ("!disabled", "#09201a"),
+                ("!disabled", COLORS["accent_text"]),
             ],
         )
         style.configure(
             "Broadcast.TButton",
             background=COLORS["accent"],
-            foreground="#09201a",
+            foreground=COLORS["accent_text"],
             font=("Segoe UI Semibold", 15),
             padding=(20, 12),
         )
@@ -966,13 +1053,13 @@ class SimpleCastApp(tk.Tk):
             ],
             foreground=[
                 ("disabled", COLORS["disabled_text"]),
-                ("!disabled", "#09201a"),
+                ("!disabled", COLORS["accent_text"]),
             ],
         )
         style.configure(
             "Stop.TButton",
             background=COLORS["error"],
-            foreground="#2d0710",
+            foreground=COLORS["error_text"],
             font=("Segoe UI Semibold", 15),
             padding=(20, 12),
         )
@@ -1277,12 +1364,53 @@ class SimpleCastApp(tk.Tk):
             text="Broadcast to",
             style="CardTitle.TLabel",
         ).pack(side="left")
+
+        server_controls = ttk.Frame(favorites, style="Card.TFrame")
+        server_controls.pack(fill="x", pady=(9, 0))
+        server_controls.columnconfigure(0, weight=1)
+        self.server_choice_var = tk.StringVar()
+        self.server_choice_combo = ttk.Combobox(
+            server_controls,
+            textvariable=self.server_choice_var,
+            state="readonly",
+            width=24,
+        )
+        self.server_choice_combo.grid(row=0, column=0, sticky="ew")
+        self.server_choice_combo.bind(
+            "<<ComboboxSelected>>",
+            self._server_choice_selected,
+        )
+        self.add_server_button = ttk.Button(
+            server_controls,
+            text="Add server",
+            command=self.add_server,
+        )
+        self.add_server_button.grid(row=0, column=1, padx=(8, 0))
+        self.edit_server_button = ttk.Button(
+            server_controls,
+            text="Edit",
+            command=self.edit_selected_server,
+        )
+        self.edit_server_button.grid(row=0, column=2, padx=(8, 0))
+        self.delete_server_button = ttk.Button(
+            server_controls,
+            text="Delete",
+            command=self.delete_selected_server,
+        )
+        self.delete_server_button.grid(row=0, column=3, padx=(8, 0))
         self.manage_servers_button = ttk.Button(
-            favorite_top,
-            text="⚙  Manage stations",
+            server_controls,
+            text="Manage stations",
             command=self.manage_servers,
         )
-        self.manage_servers_button.pack(side="right")
+        self.manage_servers_button.grid(row=0, column=4, padx=(8, 0))
+        self.server_control_widgets = (
+            self.server_choice_combo,
+            self.add_server_button,
+            self.edit_server_button,
+            self.delete_server_button,
+            self.manage_servers_button,
+        )
         self.favorite_grid = ttk.Frame(favorites, style="Card.TFrame")
         self.favorite_grid.pack(fill="x", pady=(8, 0))
         for column in range(3):
@@ -1588,9 +1716,36 @@ class SimpleCastApp(tk.Tk):
         ttk.Label(root, text="Settings", style="PageTitle.TLabel").pack(anchor="w")
         ttk.Label(
             root,
-            text="Automation, optional metadata-file integration, and support tools.",
+            text="Appearance, automation, metadata integration, and support tools.",
             style="Muted.TLabel",
         ).pack(anchor="w", pady=(2, 18))
+
+        appearance = self._card(root)
+        appearance.pack(fill="x", pady=(0, 12))
+        appearance_top = ttk.Frame(appearance, style="Card.TFrame")
+        appearance_top.pack(fill="x")
+        ttk.Label(
+            appearance_top,
+            text="Appearance",
+            style="CardTitle.TLabel",
+        ).pack(side="left")
+        self.theme_var = tk.StringVar(value=self.config.ui_theme)
+        self.theme_combo = ttk.Combobox(
+            appearance_top,
+            textvariable=self.theme_var,
+            values=list(THEMES),
+            state="readonly",
+            width=24,
+        )
+        self.theme_combo.pack(side="right")
+        self.theme_combo.bind("<<ComboboxSelected>>", self._theme_selected)
+        self.theme_description = ttk.Label(
+            appearance,
+            text=str(THEMES[self.config.ui_theme]["description"]),
+            style="CardMuted.TLabel",
+            wraplength=780,
+        )
+        self.theme_description.pack(anchor="w", pady=(10, 0))
 
         metadata = self._card(root)
         metadata.pack(fill="x", pady=(0, 12))
@@ -2102,6 +2257,40 @@ class SimpleCastApp(tk.Tk):
         self._test_ready = False
         self.play_original_button.configure(state="disabled")
         self.play_processed_button.configure(state="disabled")
+        self.save_config()
+
+    def _theme_selected(self, _event: object = None) -> None:
+        theme_name = self.theme_var.get()
+        if theme_name not in THEMES:
+            return
+        self.config.ui_theme = theme_name
+        COLORS.clear()
+        COLORS.update(THEMES[theme_name]["colors"])
+        self.configure(background=COLORS["bg"])
+        self._configure_styles()
+        self.content_canvas.configure(background=COLORS["bg"])
+        self.left_meter.configure(background=COLORS["surface"])
+        self.right_meter.configure(background=COLORS["surface"])
+        self.left_meter.redraw()
+        self.right_meter.redraw()
+        self.theme_description.configure(
+            text=str(THEMES[theme_name]["description"])
+        )
+        state_colors = {
+            BroadcastState.OFFLINE: COLORS["offline"],
+            BroadcastState.CONNECTING: COLORS["warning"],
+            BroadcastState.ON_AIR: COLORS["accent"],
+            BroadcastState.RECONNECTING: COLORS["warning"],
+            BroadcastState.ERROR: COLORS["error"],
+        }
+        self.status_label.configure(foreground=state_colors[self.state])
+        sidebar_colors = dict(state_colors)
+        sidebar_colors[BroadcastState.OFFLINE] = COLORS["sidebar_muted"]
+        sidebar_colors[BroadcastState.ON_AIR] = COLORS["sidebar_accent"]
+        self.sidebar_connection_label.configure(
+            foreground=sidebar_colors[self.state]
+        )
+        self.refresh_station()
         self.save_config()
 
     def _start_with_windows_changed(self) -> None:
@@ -2859,6 +3048,136 @@ class SimpleCastApp(tk.Tk):
     def manage_servers(self) -> None:
         ServerManager(self)
 
+    def _server_choice_labels(self) -> dict[str, str]:
+        labels: dict[str, str] = {}
+        occurrences: dict[str, int] = {}
+        for server in self.config.servers:
+            count = occurrences.get(server.name, 0) + 1
+            label = server.name if count == 1 else f"{server.name} ({count})"
+            while label in labels:
+                count += 1
+                label = f"{server.name} ({count})"
+            occurrences[server.name] = count
+            labels[label] = server.id
+        return labels
+
+    def _refresh_server_choices(self) -> None:
+        self._server_choice_ids = self._server_choice_labels()
+        labels = list(self._server_choice_ids)
+        self.server_choice_combo.configure(values=labels)
+        selected_label = next(
+            (
+                label
+                for label, server_id in self._server_choice_ids.items()
+                if server_id == self.config.selected_server_id
+            ),
+            "",
+        )
+        self.server_choice_var.set(
+            selected_label
+            if selected_label
+            else "No servers added"
+        )
+        has_servers = bool(labels)
+        control_state = (
+            "disabled"
+            if self.stream.active
+            else "readonly"
+            if has_servers
+            else "disabled"
+        )
+        self.server_choice_combo.configure(state=control_state)
+        button_state = "normal" if has_servers and not self.stream.active else "disabled"
+        self.edit_server_button.configure(state=button_state)
+        self.delete_server_button.configure(state=button_state)
+        self.add_server_button.configure(
+            state="disabled" if self.stream.active else "normal"
+        )
+
+    def _server_choice_selected(self, _event: object = None) -> None:
+        if self.stream.active:
+            return
+        server_id = self._server_choice_ids.get(self.server_choice_var.get())
+        if server_id and self.config.select_only_server(server_id):
+            self.save_config()
+            self.refresh_station()
+
+    def _save_server(self, profile: ServerProfile, password: str) -> None:
+        existing = next(
+            (item for item in self.config.servers if item.id == profile.id),
+            None,
+        )
+        if existing:
+            self.config.servers[self.config.servers.index(existing)] = profile
+        else:
+            self.config.servers.append(profile)
+            self.config.select_only_server(profile.id)
+        self.config.selected_server_id = profile.id
+        self.store.set_password(profile.id, password)
+        self.save_config()
+        self.refresh_station()
+
+    def add_server(self) -> None:
+        if not self.stream.active:
+            ServerDialog(self, None, "", self._save_server)
+
+    def edit_selected_server(self) -> None:
+        if self.stream.active:
+            return
+        profile = self.config.selected_server()
+        if profile is None:
+            messagebox.showinfo(
+                "Choose a server",
+                "Select a server to edit.",
+                parent=self,
+            )
+            return
+        ServerDialog(
+            self,
+            profile,
+            self.store.get_password(profile.id),
+            self._save_server,
+        )
+
+    def delete_selected_server(self) -> None:
+        if self.stream.active:
+            return
+        profile = self.config.selected_server()
+        if profile is None:
+            return
+        if not messagebox.askyesno(
+            "Delete server?",
+            (
+                f"Are you sure you want to delete “{profile.name}”?\n\n"
+                "Its saved connection details and password will be removed."
+            ),
+            parent=self,
+        ):
+            return
+        was_enabled = profile.id in self.config.enabled_server_ids
+        self.config.servers.remove(profile)
+        self.config.enabled_server_ids = [
+            server_id
+            for server_id in self.config.enabled_server_ids
+            if server_id != profile.id
+        ]
+        self.config.favorite_server_ids = [
+            server_id
+            for server_id in self.config.favorite_server_ids
+            if server_id != profile.id
+        ]
+        self.store.delete_password(profile.id)
+        if self.config.servers:
+            self.config.selected_server_id = self.config.servers[0].id
+            if was_enabled and not self.config.enabled_server_ids:
+                self.config.enabled_server_ids = [
+                    self.config.selected_server_id
+                ]
+        else:
+            self.config.selected_server_id = ""
+        self.save_config()
+        self.refresh_station()
+
     @staticmethod
     def _quick_station_label(server: ServerProfile) -> str:
         return f"★  {server.name}"
@@ -2920,6 +3239,7 @@ class SimpleCastApp(tk.Tk):
         self.refresh_station()
 
     def refresh_station(self) -> None:
+        self._refresh_server_choices()
         self._refresh_quick_stations()
         for child in self.server_status_frame.winfo_children():
             child.destroy()
@@ -3381,13 +3701,16 @@ class SimpleCastApp(tk.Tk):
             text=f"● {state.value.upper()}",
             foreground=colors[state],
         )
+        sidebar_colors = dict(colors)
+        sidebar_colors[BroadcastState.OFFLINE] = COLORS["sidebar_muted"]
+        sidebar_colors[BroadcastState.ON_AIR] = COLORS["sidebar_accent"]
         self.sidebar_connection_label.configure(
             text=(
                 "●  Connection ready"
                 if state == BroadcastState.OFFLINE
                 else f"●  {state.value.title()}"
             ),
-            foreground=colors[state],
+            foreground=sidebar_colors[state],
         )
         self.detail_label.configure(text=detail)
         self.sleep_preventer.set_broadcasting(state != BroadcastState.OFFLINE)
@@ -3442,7 +3765,7 @@ class SimpleCastApp(tk.Tk):
             )
             self.recording_folder_button.configure(state="normal")
             self.record_broadcasts_check.configure(state="normal")
-            self.manage_servers_button.configure(state="normal")
+            self._refresh_server_choices()
             self._refresh_quick_stations()
             self._start_meter()
         else:
@@ -3462,7 +3785,7 @@ class SimpleCastApp(tk.Tk):
             self.recording_button.configure(state="disabled")
             self.recording_folder_button.configure(state="disabled")
             self.record_broadcasts_check.configure(state="disabled")
-            self.manage_servers_button.configure(state="disabled")
+            self._refresh_server_choices()
             self._refresh_quick_stations()
 
     def _update_timer(self) -> None:

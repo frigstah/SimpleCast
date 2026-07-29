@@ -56,12 +56,11 @@ Good starting choices:
 
 ## 4. Add your radio server
 
-1. Press **Manage stations**.
-2. Press **+ Add station**.
-3. Choose **Icecast 2**, **SHOUTcast 1**, or
+1. Press **Add server** beside the server list on the Dashboard.
+2. Choose **Icecast 2**, **SHOUTcast 1**, or
    **SHOUTcast 2 (compatible source)**.
-4. Enter the details from your radio host.
-5. Press **Save station**.
+3. Enter the details from your radio host.
+4. Press **Save station**.
 
 Common Icecast fields:
 
@@ -74,7 +73,11 @@ Common Icecast fields:
 For SHOUTcast, enter the port and source password. SHOUTcast 2 may also require
 a **Stream ID (SID)**.
 
-Use **Test** when the station is not already receiving a live source. The test
+Select a saved server from the Dashboard list to make it the destination for
+your next broadcast. Use **Edit** to change it or **Delete** to remove it.
+SimpleCast always asks for confirmation before deleting a server.
+
+Use **Test connection** when the station is not already receiving a live source. The test
 briefly opens the stream connection, so do not test a mount or SID that is
 currently on air.
 
@@ -92,6 +95,17 @@ broadcast. A check mark shows the selected favorite.
 
 To broadcast to several servers at the same time, use **Manage stations** and
 mark each required server as **Included**.
+
+## Choose an appearance
+
+Open **Settings** and use the **Appearance** list:
+
+- **Modern & sleek** — compact charcoal design with cyan highlights
+- **Classic SimpleCast** — the familiar navy beta design
+- **Beginner friendly** — bright, high-contrast colors with larger controls
+
+The selected theme is applied immediately and remembered the next time
+SimpleCast starts.
 
 ## 6. Choose stream quality
 
