@@ -2,6 +2,10 @@
 
 ## Automated gate
 
+- Publish tagged betas through `.github/workflows/release-windows.yml`. The
+  Windows runner repeats the tests and encoder soak, builds both packages,
+  verifies the pinned FFmpeg source archive, generates release-specific
+  checksums, and creates a GitHub pre-release.
 - Run `.\release-check.ps1 -SoakSeconds 1800` during beta preparation.
 - Run with `-RequireSigned` only when the release policy requires signing.
 - Confirm all automated tests pass.

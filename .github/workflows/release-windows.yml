@@ -1,0 +1,141 @@
+name: Build and publish Windows beta
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.9.0-beta.7"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out the release source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Verify the requested version
+        shell: pwsh
+        run: |
+          $version = python -c "from simplecast import __version__; print(__version__)"
+          if ($env:RELEASE_TAG -ne "v$version") {
+            throw "Tag $env:RELEASE_TAG does not match SimpleCast $version."
+          }
+          "SIMPLECAST_VERSION=$version" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: python -m pip install -r requirements.txt
+
+      - name: Prepare the pinned FFmpeg build
+        shell: pwsh
+        run: .\prepare-ffmpeg.ps1
+
+      - name: Run the automated release checks
+        shell: pwsh
+        run: .\release-check.ps1 -SoakSeconds 15
+
+      - name: Build the portable application
+        shell: pwsh
+        run: .\build.ps1
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build the Windows installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            $iscc = "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            throw "Inno Setup compiler was not found."
+          }
+          & $iscc .\installer\SimpleCast.iss
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Assemble release assets
+        shell: pwsh
+        run: |
+          $portable = "SimpleCast-Windows-x64-v$env:SIMPLECAST_VERSION-portable.zip"
+          Compress-Archive -Path .\dist\SimpleCast `
+            -DestinationPath $portable -CompressionLevel Optimal
+
+          $sourceArchive = "SimpleCast-FFmpeg-Corresponding-Source-0.9.0.zip"
+          Invoke-WebRequest -UseBasicParsing `
+            -Uri (
+              "https://github.com/frigstah/SimpleCast/releases/download/" +
+              "v0.9.0-beta.6/$sourceArchive"
+            ) `
+            -OutFile $sourceArchive
+          $sourceHash = (
+            Get-FileHash -Algorithm SHA256 -LiteralPath $sourceArchive
+          ).Hash
+          $expectedSourceHash = (
+            "587B16A901B92323DA0E5C0550BFD847A2A111BED7DE8FA2CFF118AEE4FB1A63"
+          )
+          if ($sourceHash -ne $expectedSourceHash) {
+            throw "Corresponding-source archive hash mismatch."
+          }
+
+          $installer = (
+            "installer\output\SimpleCast-Setup-" +
+            "$env:SIMPLECAST_VERSION-x64.exe"
+          )
+          $checksums = "SHA256SUMS-$env:SIMPLECAST_VERSION.txt"
+          @($installer, $portable, $sourceArchive) |
+            ForEach-Object {
+              $item = Get-Item -LiteralPath $_
+              $hash = (Get-FileHash -Algorithm SHA256 `
+                -LiteralPath $item.FullName).Hash
+              "$hash  $($item.Name)"
+            } |
+            Set-Content -LiteralPath $checksums -Encoding ascii
+
+      - name: Preserve packages as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimpleCast-${{ env.SIMPLECAST_VERSION }}-Windows
+          path: |
+            installer/output/SimpleCast-Setup-${{ env.SIMPLECAST_VERSION }}-x64.exe
+            SimpleCast-Windows-x64-v${{ env.SIMPLECAST_VERSION }}-portable.zip
+            SHA256SUMS-${{ env.SIMPLECAST_VERSION }}.txt
+            SimpleCast-FFmpeg-Corresponding-Source-0.9.0.zip
+          if-no-files-found: error
+
+      - name: Publish the GitHub pre-release
+        shell: pwsh
+        run: |
+          $version = $env:SIMPLECAST_VERSION
+          gh release create $env:RELEASE_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title "SimpleCast $version" `
+            --notes-file "docs\RELEASE_NOTES_$version.md" `
+            --prerelease `
+            "installer\output\SimpleCast-Setup-$version-x64.exe" `
+            "SimpleCast-Windows-x64-v$version-portable.zip" `
+            "SHA256SUMS-$version.txt" `
+            "SimpleCast-FFmpeg-Corresponding-Source-0.9.0.zip"
