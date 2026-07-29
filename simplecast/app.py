@@ -56,14 +56,20 @@ from .windows import SleepPreventer
 
 
 COLORS = {
-    "bg": "#0d1726",
-    "surface": "#152235",
-    "surface_alt": "#1c2c42",
-    "line": "#2b405b",
+    "bg": "#0b1422",
+    "surface": "#142238",
+    "surface_alt": "#1c2f49",
+    "surface_hover": "#263d5b",
+    "input": "#0d1b2d",
+    "input_hover": "#132842",
+    "disabled": "#17263a",
+    "disabled_text": "#71839a",
+    "line": "#355170",
     "text": "#f5f7fb",
-    "muted": "#9fb0c6",
-    "accent": "#4cd4a7",
-    "accent_dark": "#142d2c",
+    "muted": "#adbed2",
+    "accent": "#55ddb0",
+    "accent_hover": "#73e9c2",
+    "accent_dark": "#123a34",
     "warning": "#f6c85f",
     "error": "#ff6b7a",
     "offline": "#93a4b8",
@@ -648,6 +654,24 @@ class SimpleCastApp(tk.Tk):
     def _configure_styles(self) -> None:
         style = ttk.Style(self)
         style.theme_use("clam")
+
+        # The combobox popup is a classic Tk Listbox, not a ttk widget. Its
+        # palette must be configured separately or Windows can use light system
+        # colors that conflict with the dark readonly field.
+        self.option_add("*TCombobox*Listbox.background", COLORS["input"])
+        self.option_add("*TCombobox*Listbox.foreground", COLORS["text"])
+        self.option_add(
+            "*TCombobox*Listbox.selectBackground",
+            COLORS["accent"],
+        )
+        self.option_add(
+            "*TCombobox*Listbox.selectForeground",
+            "#071d17",
+        )
+        self.option_add("*TCombobox*Listbox.font", ("Segoe UI", 10))
+        self.option_add("*TCombobox*Listbox.relief", "flat")
+        self.option_add("*TCombobox*Listbox.borderWidth", 0)
+
         style.configure(".", font=("Segoe UI", 10), background=COLORS["bg"])
         style.configure("TFrame", background=COLORS["bg"])
         style.configure("Card.TFrame", background=COLORS["surface"])
@@ -698,15 +722,38 @@ class SimpleCastApp(tk.Tk):
             foreground=COLORS["text"],
             borderwidth=0,
             padding=(14, 8),
+            relief="flat",
         )
-        style.map("TButton", background=[("active", COLORS["line"])])
+        style.map(
+            "TButton",
+            background=[
+                ("disabled", COLORS["disabled"]),
+                ("pressed", COLORS["input"]),
+                ("active", COLORS["surface_hover"]),
+            ],
+            foreground=[
+                ("disabled", COLORS["disabled_text"]),
+                ("!disabled", COLORS["text"]),
+            ],
+        )
         style.configure(
             "Accent.TButton",
             background=COLORS["accent"],
             foreground="#09201a",
             font=("Segoe UI Semibold", 10),
         )
-        style.map("Accent.TButton", background=[("active", "#68e2bb")])
+        style.map(
+            "Accent.TButton",
+            background=[
+                ("disabled", COLORS["disabled"]),
+                ("pressed", COLORS["accent"]),
+                ("active", COLORS["accent_hover"]),
+            ],
+            foreground=[
+                ("disabled", COLORS["disabled_text"]),
+                ("!disabled", "#09201a"),
+            ],
+        )
         style.configure(
             "Broadcast.TButton",
             background=COLORS["accent"],
@@ -714,7 +761,18 @@ class SimpleCastApp(tk.Tk):
             font=("Segoe UI Semibold", 15),
             padding=(20, 16),
         )
-        style.map("Broadcast.TButton", background=[("active", "#68e2bb")])
+        style.map(
+            "Broadcast.TButton",
+            background=[
+                ("disabled", COLORS["disabled"]),
+                ("pressed", COLORS["accent"]),
+                ("active", COLORS["accent_hover"]),
+            ],
+            foreground=[
+                ("disabled", COLORS["disabled_text"]),
+                ("!disabled", "#09201a"),
+            ],
+        )
         style.configure(
             "Stop.TButton",
             background=COLORS["error"],
@@ -724,19 +782,85 @@ class SimpleCastApp(tk.Tk):
         )
         style.configure(
             "TEntry",
-            fieldbackground=COLORS["surface_alt"],
+            fieldbackground=COLORS["input"],
             foreground=COLORS["text"],
             insertcolor=COLORS["text"],
             bordercolor=COLORS["line"],
-            padding=6,
+            lightcolor=COLORS["line"],
+            darkcolor=COLORS["line"],
+            borderwidth=1,
+            padding=(9, 7),
+        )
+        style.map(
+            "TEntry",
+            fieldbackground=[
+                ("disabled", COLORS["disabled"]),
+                ("focus", COLORS["input_hover"]),
+                ("!disabled", COLORS["input"]),
+            ],
+            foreground=[
+                ("disabled", COLORS["disabled_text"]),
+                ("!disabled", COLORS["text"]),
+            ],
+            bordercolor=[
+                ("focus", COLORS["accent"]),
+                ("!focus", COLORS["line"]),
+            ],
+            lightcolor=[
+                ("focus", COLORS["accent"]),
+                ("!focus", COLORS["line"]),
+            ],
+            darkcolor=[
+                ("focus", COLORS["accent"]),
+                ("!focus", COLORS["line"]),
+            ],
         )
         style.configure(
             "TCombobox",
-            fieldbackground=COLORS["surface_alt"],
+            fieldbackground=COLORS["input"],
             background=COLORS["surface_alt"],
             foreground=COLORS["text"],
             arrowcolor=COLORS["text"],
-            padding=6,
+            bordercolor=COLORS["line"],
+            lightcolor=COLORS["line"],
+            darkcolor=COLORS["line"],
+            borderwidth=1,
+            arrowsize=16,
+            padding=(9, 7),
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[
+                ("disabled", COLORS["disabled"]),
+                ("focus", COLORS["input_hover"]),
+                ("readonly", COLORS["input"]),
+            ],
+            background=[
+                ("disabled", COLORS["disabled"]),
+                ("pressed", COLORS["accent_dark"]),
+                ("active", COLORS["surface_hover"]),
+                ("readonly", COLORS["surface_alt"]),
+            ],
+            foreground=[
+                ("disabled", COLORS["disabled_text"]),
+                ("readonly", COLORS["text"]),
+            ],
+            arrowcolor=[
+                ("disabled", COLORS["disabled_text"]),
+                ("readonly", COLORS["text"]),
+            ],
+            bordercolor=[
+                ("focus", COLORS["accent"]),
+                ("!focus", COLORS["line"]),
+            ],
+            lightcolor=[
+                ("focus", COLORS["accent"]),
+                ("!focus", COLORS["line"]),
+            ],
+            darkcolor=[
+                ("focus", COLORS["accent"]),
+                ("!focus", COLORS["line"]),
+            ],
         )
         style.configure(
             "TCheckbutton",
@@ -751,7 +875,12 @@ class SimpleCastApp(tk.Tk):
         style.configure(
             "Horizontal.TScale",
             background=COLORS["surface"],
-            troughcolor=COLORS["surface_alt"],
+            troughcolor=COLORS["input"],
+            bordercolor=COLORS["input"],
+            lightcolor=COLORS["accent"],
+            darkcolor=COLORS["accent"],
+            sliderlength=18,
+            sliderthickness=18,
         )
         style.configure(
             "TLabelframe",
