@@ -196,6 +196,30 @@ class ListenerStatsTests(unittest.TestCase):
         self.assertEqual(fetch_listener_count(server, opener=opener), 5)
         self.assertEqual(urls, ["http://radio.example:8000/7.html"])
 
+    def test_shoutcast_1_uses_a_browser_compatible_user_agent(self) -> None:
+        seen_user_agents: list[str] = []
+
+        def legacy_shoutcast(request: object, timeout: float) -> FakeResponse:
+            del timeout
+            user_agent = request.get_header("User-agent", "")
+            seen_user_agents.append(user_agent)
+            if not user_agent.startswith("Mozilla/"):
+                raise RuntimeError("ICY 404 Resource Not Found")
+            return FakeResponse(
+                "<html><body>6,0,12,100,6,192,Artist - Title</body></html>"
+            )
+
+        server = ServerProfile(
+            server_type="shoutcast1",
+            host="legacy-radio.example",
+        )
+        self.assertEqual(
+            fetch_listener_count(server, opener=legacy_shoutcast),
+            6,
+        )
+        self.assertEqual(len(seen_user_agents), 1)
+        self.assertTrue(seen_user_agents[0].startswith("Mozilla/"))
+
 
 if __name__ == "__main__":
     unittest.main()

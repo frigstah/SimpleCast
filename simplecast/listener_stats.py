@@ -17,6 +17,12 @@ class ListenerStatsUnavailable(RuntimeError):
     """Raised when a server does not expose a usable listener count."""
 
 
+LISTENER_STATS_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; compatible) "
+    "SimpleCast listener monitor"
+)
+
+
 def _request_text(
     url: str,
     timeout: float,
@@ -26,7 +32,11 @@ def _request_text(
         url,
         headers={
             "Accept": "application/json, text/plain, text/html",
-            "User-Agent": "SimpleCast listener monitor",
+            # Older SHOUTcast 1 servers route unknown user agents to their
+            # audio endpoint, which replies with an ICY status line that
+            # standard HTTP clients reject. Identifying as a compatible web
+            # client makes /7.html return its intended statistics response.
+            "User-Agent": LISTENER_STATS_USER_AGENT,
         },
     )
     with opener(request, timeout=timeout) as response:

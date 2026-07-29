@@ -30,7 +30,7 @@ Updated: 2026-07-29
 
 | Check | Result |
 | --- | --- |
-| Automated test suite | Pass (72 tests) |
+| Automated test suite | Pass (73 tests) |
 | Four-skin functional UI smoke test | Pass |
 | Integrated title bar maximize/restore and clean close | Pass (all four skins) |
 | Embedded Stations page and six-row station refresh | Pass (all four skins) |
