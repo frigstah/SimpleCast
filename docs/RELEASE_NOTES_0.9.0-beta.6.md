@@ -19,6 +19,8 @@ themes.
   - **Beginner friendly**
 - Theme changes apply immediately and persist across restarts.
 - The beginner theme uses higher contrast, larger text, and roomier controls.
+- Closed dropdowns ignore mouse-wheel input, preventing accidental setting
+  changes; open dropdown lists retain normal wheel scrolling.
 
 ## Verification
 

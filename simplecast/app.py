@@ -1327,6 +1327,15 @@ class SimpleCastApp(tk.Tk):
             ),
         )
         self.bind_all("<MouseWheel>", self._scroll_content, add="+")
+        # Tk's default TCombobox class binding changes the selected value when
+        # the wheel is used over a closed field. Replace that binding entirely.
+        # An open dropdown is a separate Listbox window, so its own normal
+        # wheel scrolling remains available for long lists.
+        self.bind_class(
+            "TCombobox",
+            "<MouseWheel>",
+            self._ignore_closed_combobox_wheel,
+        )
 
         self.pages = {
             "Dashboard": ttk.Frame(self.page_host),
@@ -2803,6 +2812,10 @@ class SimpleCastApp(tk.Tk):
                 return "break"
             widget = getattr(widget, "master", None)
         return None
+
+    @staticmethod
+    def _ignore_closed_combobox_wheel(_event: tk.Event) -> str:
+        return "break"
 
     @staticmethod
     def _quality_description(quality: str) -> str:

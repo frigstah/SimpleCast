@@ -107,6 +107,10 @@ Open **Settings** and use the **Appearance** list:
 The selected theme is applied immediately and remembered the next time
 SimpleCast starts.
 
+Closed dropdown fields ignore the mouse wheel so hovering cannot accidentally
+change a setting. Open a dropdown first when you want to scroll through a long
+list.
+
 ## 6. Choose stream quality
 
 For most broadcasts, use:
