@@ -28,6 +28,7 @@ from .metadata import (
     METADATA_FORMATS,
     MetadataDeliveryEngine,
     MetadataFileWatcher,
+    format_manual_now_playing,
     sanitized_server_json,
 )
 from .models import AppConfig, ServerProfile
@@ -172,6 +173,48 @@ class LevelMeter(tk.Canvas):
             self.create_rectangle(0, 0, fill_width, height, fill=color, outline="")
         self.create_line(width * 0.78, 0, width * 0.78, height, fill="#d3a94d")
         self.create_line(width * 0.94, 0, width * 0.94, height, fill="#d95b68")
+
+
+class VerticalLevelMeter(tk.Canvas):
+    def __init__(self, master: tk.Misc, **kwargs: object) -> None:
+        super().__init__(
+            master,
+            width=30,
+            height=165,
+            background=COLORS["surface"],
+            highlightthickness=0,
+            **kwargs,
+        )
+        self.level = 0.0
+        self.bind("<Configure>", lambda _event: self.redraw())
+
+    def set_level(self, level: float) -> None:
+        self.level = max(0.0, min(1.0, level))
+        self.redraw()
+
+    def redraw(self) -> None:
+        self.delete("all")
+        width = self.winfo_width()
+        height = self.winfo_height()
+        segments = 24
+        gap = 2
+        segment_height = max(2, (height - gap * (segments - 1)) / segments)
+        active_segments = int(round(self.level * segments))
+        for index in range(segments):
+            y2 = height - index * (segment_height + gap)
+            y1 = y2 - segment_height
+            if index < active_segments:
+                ratio = (index + 1) / segments
+                color = (
+                    COLORS["error"]
+                    if ratio >= 0.9
+                    else COLORS["warning"]
+                    if ratio >= 0.72
+                    else COLORS["accent"]
+                )
+            else:
+                color = COLORS["input"]
+            self.create_rectangle(0, y1, width, y2, fill=color, outline="")
 
 
 class ServerDialog(tk.Toplevel):
@@ -545,6 +588,16 @@ class ServerManager(tk.Toplevel):
         if profile.id in self.app.config.favorite_server_ids:
             self.app.config.favorite_server_ids.remove(profile.id)
         else:
+            if len(self.app.config.favorite_server_ids) >= 6:
+                messagebox.showinfo(
+                    "Six favorites already selected",
+                    (
+                        "SimpleCast shows up to six favorite stations on the "
+                        "dashboard. Remove one favorite before adding another."
+                    ),
+                    parent=self,
+                )
+                return
             self.app.config.favorite_server_ids.append(profile.id)
         self.app.save_config()
         self.refresh()
@@ -595,8 +648,8 @@ class SimpleCastApp(tk.Tk):
         except tk.TclError:
             pass
         self.title(f"SimpleCast {__version__}")
-        self.geometry("920x820")
-        self.minsize(640, 520)
+        self.geometry("1180x800")
+        self.minsize(880, 620)
         self.configure(background=COLORS["bg"])
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.log_path = configure_logging()
@@ -661,10 +714,10 @@ class SimpleCastApp(tk.Tk):
         self.update_idletasks()
         _fit_window(
             self,
-            920,
-            max(820, self.content_frame.winfo_reqheight()),
-            640,
-            520,
+            1180,
+            800,
+            880,
+            620,
         )
         self.refresh_devices()
         self.refresh_station()
@@ -702,8 +755,19 @@ class SimpleCastApp(tk.Tk):
         style.configure(".", font=("Segoe UI", 10), background=COLORS["bg"])
         style.configure("TFrame", background=COLORS["bg"])
         style.configure("Card.TFrame", background=COLORS["surface"])
+        style.configure("Sidebar.TFrame", background="#0a1828")
         style.configure(
             "TLabel", background=COLORS["bg"], foreground=COLORS["text"]
+        )
+        style.configure(
+            "Sidebar.TLabel",
+            background="#0a1828",
+            foreground=COLORS["text"],
+        )
+        style.configure(
+            "SidebarMuted.TLabel",
+            background="#0a1828",
+            foreground=COLORS["muted"],
         )
         style.configure(
             "Card.TLabel", background=COLORS["surface"], foreground=COLORS["text"]
@@ -735,6 +799,12 @@ class SimpleCastApp(tk.Tk):
             font=("Segoe UI Semibold", 26),
         )
         style.configure(
+            "PageTitle.TLabel",
+            background=COLORS["bg"],
+            foreground=COLORS["text"],
+            font=("Segoe UI Semibold", 22),
+        )
+        style.configure(
             "Status.TLabel",
             background=COLORS["bg"],
             foreground=COLORS["offline"],
@@ -764,6 +834,75 @@ class SimpleCastApp(tk.Tk):
             ],
         )
         style.configure(
+            "Nav.TButton",
+            background="#0a1828",
+            foreground=COLORS["muted"],
+            anchor="w",
+            font=("Segoe UI Semibold", 11),
+            padding=(18, 13),
+        )
+        style.map(
+            "Nav.TButton",
+            background=[
+                ("active", COLORS["surface_alt"]),
+                ("pressed", COLORS["surface_alt"]),
+            ],
+            foreground=[
+                ("active", COLORS["accent"]),
+                ("!disabled", COLORS["muted"]),
+            ],
+        )
+        style.configure(
+            "NavActive.TButton",
+            background=COLORS["surface_alt"],
+            foreground=COLORS["accent"],
+            anchor="w",
+            font=("Segoe UI Semibold", 11),
+            padding=(18, 13),
+        )
+        style.map(
+            "NavActive.TButton",
+            background=[("active", COLORS["surface_hover"])],
+            foreground=[("!disabled", COLORS["accent"])],
+        )
+        style.configure(
+            "Favorite.TButton",
+            background=COLORS["input"],
+            foreground=COLORS["text"],
+            anchor="w",
+            font=("Segoe UI Semibold", 10),
+            padding=(12, 8),
+            borderwidth=1,
+            bordercolor=COLORS["line"],
+        )
+        style.map(
+            "Favorite.TButton",
+            background=[
+                ("disabled", COLORS["disabled"]),
+                ("active", COLORS["surface_hover"]),
+            ],
+            foreground=[
+                ("disabled", COLORS["disabled_text"]),
+                ("!disabled", COLORS["text"]),
+            ],
+            bordercolor=[("active", COLORS["accent"])],
+        )
+        style.configure(
+            "FavoriteSelected.TButton",
+            background=COLORS["accent_dark"],
+            foreground=COLORS["accent"],
+            anchor="w",
+            font=("Segoe UI Semibold", 10),
+            padding=(12, 8),
+            borderwidth=2,
+            bordercolor=COLORS["accent"],
+        )
+        style.map(
+            "FavoriteSelected.TButton",
+            background=[("active", "#194941")],
+            foreground=[("!disabled", COLORS["accent"])],
+        )
+        style.configure(
             "Accent.TButton",
             background=COLORS["accent"],
             foreground="#09201a",
@@ -786,7 +925,7 @@ class SimpleCastApp(tk.Tk):
             background=COLORS["accent"],
             foreground="#09201a",
             font=("Segoe UI Semibold", 15),
-            padding=(20, 16),
+            padding=(20, 12),
         )
         style.map(
             "Broadcast.TButton",
@@ -805,7 +944,7 @@ class SimpleCastApp(tk.Tk):
             background=COLORS["error"],
             foreground="#2d0710",
             font=("Segoe UI Semibold", 15),
-            padding=(20, 16),
+            padding=(20, 12),
         )
         style.configure(
             "TEntry",
@@ -941,10 +1080,101 @@ class SimpleCastApp(tk.Tk):
         )
 
     def _card(self, parent: tk.Misc) -> ttk.Frame:
-        return ttk.Frame(parent, padding=20, style="Card.TFrame")
+        return ttk.Frame(parent, padding=16, style="Card.TFrame")
 
     def _build(self) -> None:
-        viewport = ttk.Frame(self)
+        shell = ttk.Frame(self)
+        shell.pack(fill="both", expand=True)
+        sidebar = ttk.Frame(shell, width=218, style="Sidebar.TFrame")
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+        content = ttk.Frame(shell)
+        content.pack(side="left", fill="both", expand=True)
+
+        brand = ttk.Frame(sidebar, style="Sidebar.TFrame", padding=(22, 24))
+        brand.pack(fill="x")
+        ttk.Label(
+            brand,
+            text="◉  SimpleCast",
+            style="Sidebar.TLabel",
+            font=("Segoe UI Semibold", 18),
+        ).pack(anchor="w")
+
+        self.nav_buttons: dict[str, ttk.Button] = {}
+        for page_name, icon in (
+            ("Dashboard", "⌂"),
+            ("Stations", "⌁"),
+            ("Recordings", "●"),
+            ("Settings", "⚙"),
+        ):
+            command = (
+                self.manage_servers
+                if page_name == "Stations"
+                else lambda name=page_name: self._show_page(name)
+            )
+            button = ttk.Button(
+                sidebar,
+                text=f"{icon}   {page_name}",
+                style="Nav.TButton",
+                command=command,
+            )
+            button.pack(fill="x", padx=12, pady=2)
+            self.nav_buttons[page_name] = button
+
+        sidebar_footer = ttk.Frame(
+            sidebar,
+            style="Sidebar.TFrame",
+            padding=(22, 18),
+        )
+        sidebar_footer.pack(side="bottom", fill="x")
+        ttk.Separator(sidebar_footer).pack(fill="x", pady=(0, 15))
+        self.sidebar_connection_label = ttk.Label(
+            sidebar_footer,
+            text="●  Connection ready",
+            style="Sidebar.TLabel",
+        )
+        self.sidebar_connection_label.pack(anchor="w")
+        self.recording_status_label = ttk.Label(
+            sidebar_footer,
+            text="●  Recording off",
+            style="SidebarMuted.TLabel",
+            wraplength=175,
+        )
+        self.recording_status_label.pack(anchor="w", pady=(9, 15))
+        ttk.Label(
+            sidebar_footer,
+            text="By Doversoft,\nthank you for trying it out",
+            style="SidebarMuted.TLabel",
+            justify="left",
+        ).pack(anchor="w")
+        ttk.Label(
+            sidebar_footer,
+            text=f"SimpleCast {__version__}",
+            style="SidebarMuted.TLabel",
+        ).pack(anchor="w", pady=(7, 0))
+
+        header = ttk.Frame(content, padding=(30, 14, 30, 8))
+        header.pack(fill="x")
+        title_group = ttk.Frame(header)
+        title_group.pack(side="left")
+        ttk.Label(title_group, text="SimpleCast", style="Hero.TLabel").pack(anchor="w")
+        ttk.Label(
+            title_group,
+            text="Broadcasting without all the fuzz",
+            style="Muted.TLabel",
+        ).pack(anchor="w")
+        status_group = ttk.Frame(header)
+        status_group.pack(side="right")
+        self.status_label = ttk.Label(
+            status_group,
+            text="● OFFLINE",
+            style="Status.TLabel",
+        )
+        self.status_label.pack(anchor="e")
+        self.timer_label = ttk.Label(status_group, text="", style="Muted.TLabel")
+        self.timer_label.pack(anchor="e", pady=(3, 0))
+
+        viewport = ttk.Frame(content)
         viewport.pack(fill="both", expand=True)
         self.content_canvas = tk.Canvas(
             viewport,
@@ -960,14 +1190,13 @@ class SimpleCastApp(tk.Tk):
         self.content_canvas.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
         self.content_canvas.pack(side="left", fill="both", expand=True)
-        root = ttk.Frame(self.content_canvas, padding=(32, 26))
-        self.content_frame = root
+        self.page_host = ttk.Frame(self.content_canvas, padding=(30, 8, 22, 6))
         self.content_window = self.content_canvas.create_window(
             (0, 0),
-            window=root,
+            window=self.page_host,
             anchor="nw",
         )
-        root.bind(
+        self.page_host.bind(
             "<Configure>",
             lambda _event: self.content_canvas.configure(
                 scrollregion=self.content_canvas.bbox("all")
@@ -981,28 +1210,21 @@ class SimpleCastApp(tk.Tk):
             ),
         )
         self.bind_all("<MouseWheel>", self._scroll_content, add="+")
-        header = ttk.Frame(root)
-        header.pack(fill="x", pady=(0, 20))
-        title_group = ttk.Frame(header)
-        title_group.pack(side="left")
-        ttk.Label(title_group, text="SimpleCast", style="Hero.TLabel").pack(anchor="w")
-        ttk.Label(
-            title_group,
-            text="Broadcasting without all the fuzz",
-            style="Muted.TLabel",
-        ).pack(anchor="w")
-        status_group = ttk.Frame(header)
-        status_group.pack(side="right")
-        self.status_label = ttk.Label(status_group, text="● OFFLINE", style="Status.TLabel")
-        self.status_label.pack(anchor="e")
-        self.timer_label = ttk.Label(status_group, text="", style="Muted.TLabel")
-        self.timer_label.pack(anchor="e", pady=(3, 0))
 
+        self.pages = {
+            "Dashboard": ttk.Frame(self.page_host),
+            "Recordings": ttk.Frame(self.page_host),
+            "Settings": ttk.Frame(self.page_host),
+        }
+        self.content_frame = self.pages["Dashboard"]
+        self._build_dashboard(self.pages["Dashboard"])
+        self._build_recordings_page(self.pages["Recordings"])
+        self._build_settings_page(self.pages["Settings"])
+        self._show_page("Dashboard")
+
+    def _build_dashboard(self, root: ttk.Frame) -> None:
         self.startup_banner = self._card(root)
-        startup_banner_row = ttk.Frame(
-            self.startup_banner,
-            style="Card.TFrame",
-        )
+        startup_banner_row = ttk.Frame(self.startup_banner, style="Card.TFrame")
         startup_banner_row.pack(fill="x")
         self.startup_status_label = ttk.Label(
             startup_banner_row,
@@ -1016,58 +1238,88 @@ class SimpleCastApp(tk.Tk):
             command=self.cancel_automatic_start,
         ).pack(side="right", padx=(12, 0))
 
-        sound = self._card(root)
+        favorites = ttk.Frame(root, padding=14, style="Card.TFrame")
+        favorites.pack(fill="x", pady=(0, 10))
+        favorite_top = ttk.Frame(favorites, style="Card.TFrame")
+        favorite_top.pack(fill="x")
+        ttk.Label(
+            favorite_top,
+            text="Broadcast to",
+            style="CardTitle.TLabel",
+        ).pack(side="left")
+        self.manage_servers_button = ttk.Button(
+            favorite_top,
+            text="⚙  Manage stations",
+            command=self.manage_servers,
+        )
+        self.manage_servers_button.pack(side="right")
+        self.favorite_grid = ttk.Frame(favorites, style="Card.TFrame")
+        self.favorite_grid.pack(fill="x", pady=(8, 0))
+        for column in range(3):
+            self.favorite_grid.columnconfigure(column, weight=1)
+        self.favorite_buttons: list[ttk.Button] = []
+
+        self.dashboard_body = ttk.Frame(root)
+        self.dashboard_body.pack(fill="both", expand=True)
+        self.dashboard_body.columnconfigure(0, weight=3, uniform="dashboard")
+        self.dashboard_body.columnconfigure(1, weight=2, uniform="dashboard")
+        self.dashboard_body.rowconfigure(1, weight=1)
+
+        sound = self._card(self.dashboard_body)
         self.sound_card = sound
-        sound.pack(fill="x", pady=(0, 12))
+        sound.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 6))
         top = ttk.Frame(sound, style="Card.TFrame")
         top.pack(fill="x")
-        ttk.Label(top, text="1  YOUR SOUND", style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(top, text="Audio Input", style="CardTitle.TLabel").pack(side="left")
         ttk.Button(top, text="Refresh", command=self.refresh_devices).pack(side="right")
+        audio_body = ttk.Frame(sound, style="Card.TFrame")
+        audio_body.pack(fill="both", expand=True, pady=(8, 0))
+        audio_body.columnconfigure(0, weight=1)
+        controls = ttk.Frame(audio_body, style="Card.TFrame")
+        controls.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
+        meters = ttk.Frame(audio_body, style="Card.TFrame")
+        meters.grid(row=0, column=1, sticky="ns")
+
+        ttk.Label(controls, text="Device", style="CardMuted.TLabel").pack(anchor="w")
         self.device_var = tk.StringVar()
         self.device_combo = ttk.Combobox(
-            sound,
+            controls,
             textvariable=self.device_var,
             state="readonly",
         )
-        self.device_combo.pack(fill="x", pady=(14, 12))
+        self.device_combo.pack(fill="x", pady=(3, 6))
         self.device_combo.bind("<<ComboboxSelected>>", self._device_selected)
 
-        audio_system_row = ttk.Frame(sound, style="Card.TFrame")
-        audio_system_row.pack(fill="x", pady=(0, 12))
+        audio_system_row = ttk.Frame(controls, style="Card.TFrame")
+        audio_system_row.pack(fill="x", pady=(0, 6))
         ttk.Label(
             audio_system_row,
             text="Audio system",
-            width=13,
             style="CardMuted.TLabel",
-        ).pack(side="left")
+        ).pack(anchor="w")
         self.audio_system_var = tk.StringVar(value=self.config.audio_system)
         self.audio_system_combo = ttk.Combobox(
             audio_system_row,
             textvariable=self.audio_system_var,
             values=AUDIO_SYSTEMS,
             state="readonly",
-            width=25,
         )
-        self.audio_system_combo.pack(side="left", padx=(4, 10))
+        self.audio_system_combo.pack(fill="x", pady=(3, 0))
         self.audio_system_combo.bind(
             "<<ComboboxSelected>>",
             self._audio_system_selected,
         )
         self.audio_api_status = ttk.Label(
-            audio_system_row,
+            controls,
             text="Checking active audio system…",
             style="CardMuted.TLabel",
+            wraplength=330,
         )
-        self.audio_api_status.pack(side="left", fill="x", expand=True)
+        self.audio_api_status.pack(anchor="w", pady=(0, 6))
 
-        volume_row = ttk.Frame(sound, style="Card.TFrame")
-        volume_row.pack(fill="x", pady=(0, 12))
-        ttk.Label(
-            volume_row,
-            text="Input volume",
-            width=13,
-            style="CardMuted.TLabel",
-        ).pack(side="left")
+        ttk.Label(controls, text="Input volume", style="CardMuted.TLabel").pack(anchor="w")
+        volume_row = ttk.Frame(controls, style="Card.TFrame")
+        volume_row.pack(fill="x", pady=(3, 6))
         self.volume_var = tk.DoubleVar(value=self.config.input_volume_percent)
         self.volume_slider = ttk.Scale(
             volume_row,
@@ -1076,7 +1328,7 @@ class SimpleCastApp(tk.Tk):
             variable=self.volume_var,
             command=self._volume_changed,
         )
-        self.volume_slider.pack(side="left", fill="x", expand=True, padx=(4, 10))
+        self.volume_slider.pack(side="left", fill="x", expand=True)
         self.volume_label = ttk.Label(
             volume_row,
             text=f"{self.config.input_volume_percent}%",
@@ -1084,173 +1336,66 @@ class SimpleCastApp(tk.Tk):
             anchor="e",
             style="Card.TLabel",
         )
-        self.volume_label.pack(side="left")
+        self.volume_label.pack(side="left", padx=(8, 0))
         ttk.Button(
             volume_row,
             text="Reset",
             command=self._reset_volume,
-        ).pack(side="left", padx=(10, 0))
+        ).pack(side="left", padx=(8, 0))
 
-        processing_row = ttk.Frame(sound, style="Card.TFrame")
-        processing_row.pack(fill="x", pady=(0, 12))
-        ttk.Label(
-            processing_row,
-            text="Processing",
-            width=13,
-            style="CardMuted.TLabel",
-        ).pack(side="left")
-        self.processing_var = tk.StringVar(
-            value=self.config.processing_preset
-        )
+        ttk.Label(controls, text="Processing", style="CardMuted.TLabel").pack(anchor="w")
+        self.processing_var = tk.StringVar(value=self.config.processing_preset)
         self.processing_combo = ttk.Combobox(
-            processing_row,
+            controls,
             textvariable=self.processing_var,
             values=list(PROCESSING_PRESETS),
             state="readonly",
-            width=18,
         )
-        self.processing_combo.pack(side="left", padx=(4, 10))
+        self.processing_combo.pack(fill="x", pady=(3, 3))
         self.processing_combo.bind(
             "<<ComboboxSelected>>",
             self._processing_selected,
         )
         self.processing_detail = ttk.Label(
-            processing_row,
-            text=PROCESSING_PRESETS[
-                self.config.processing_preset
-            ].description,
+            controls,
+            text=PROCESSING_PRESETS[self.config.processing_preset].description,
             style="CardMuted.TLabel",
+            wraplength=330,
         )
-        self.processing_detail.pack(side="left", fill="x", expand=True)
-
-        meters = ttk.Frame(sound, style="Card.TFrame")
-        meters.pack(fill="x")
-        ttk.Label(meters, text="L", width=3, style="CardMuted.TLabel").grid(
-            row=0, column=0
-        )
-        self.left_meter = LevelMeter(meters)
-        self.left_meter.grid(row=0, column=1, sticky="ew")
-        ttk.Label(meters, text="R", width=3, style="CardMuted.TLabel").grid(
-            row=1, column=0, pady=(5, 0)
-        )
-        self.right_meter = LevelMeter(meters)
-        self.right_meter.grid(row=1, column=1, sticky="ew", pady=(5, 0))
-        meters.columnconfigure(1, weight=1)
-        sound_actions = ttk.Frame(sound, style="Card.TFrame")
-        sound_actions.pack(fill="x", pady=(14, 0))
+        self.processing_detail.pack(anchor="w")
         self.sound_hint = ttk.Label(
-            sound_actions,
-            text="Speak or play audio. Aim for green movement without red peaks.",
+            controls,
+            text="Aim for healthy green movement without red peaks.",
             style="CardMuted.TLabel",
+            wraplength=330,
         )
-        self.sound_hint.pack(fill="x")
-        preview_actions = ttk.Frame(sound_actions, style="Card.TFrame")
-        preview_actions.pack(fill="x", pady=(10, 0))
-        self.sound_button = ttk.Button(
-            preview_actions,
-            text="Test my sound",
-            command=self.test_sound,
-        )
-        self.sound_button.pack(side="right")
-        self.play_processed_button = ttk.Button(
-            preview_actions,
-            text="Play processed",
-            command=lambda: self._play_test_file(self.processed_test_path),
-            state="disabled",
-        )
-        self.play_processed_button.pack(side="right", padx=(0, 8))
-        self.play_original_button = ttk.Button(
-            preview_actions,
-            text="Play original",
-            command=lambda: self._play_test_file(self.last_test_path),
-            state="disabled",
-        )
-        self.play_original_button.pack(side="right", padx=(0, 8))
+        self.sound_hint.pack(anchor="w", pady=(6, 0))
 
-        station = self._card(root)
-        station.pack(fill="x", pady=(0, 12))
-        top = ttk.Frame(station, style="Card.TFrame")
-        top.pack(fill="x")
-        ttk.Label(top, text="2  YOUR STATION", style="CardTitle.TLabel").pack(side="left")
-        self.manage_servers_button = ttk.Button(
-            top,
-            text="Manage stations",
-            command=self.manage_servers,
-        )
-        self.manage_servers_button.pack(side="right")
-        quick_station_row = ttk.Frame(station, style="Card.TFrame")
-        quick_station_row.pack(fill="x", pady=(14, 2))
-        ttk.Label(
-            quick_station_row,
-            text="Quick station",
-            width=13,
-            style="CardMuted.TLabel",
-        ).pack(side="left")
-        self.quick_station_var = tk.StringVar()
-        self.quick_station_combo = ttk.Combobox(
-            quick_station_row,
-            textvariable=self.quick_station_var,
-            state="disabled",
-            width=38,
-        )
-        self.quick_station_combo.pack(side="left", fill="x", expand=True)
-        self.quick_station_combo.bind(
-            "<<ComboboxSelected>>",
-            self._quick_station_selected,
-        )
-        self.quick_station_ids: list[str] = []
-        self.station_name = ttk.Label(
-            station,
-            text="No station added",
-            style="Card.TLabel",
-            font=("Segoe UI Semibold", 13),
-        )
-        self.station_name.pack(anchor="w", pady=(12, 2))
-        self.station_detail = ttk.Label(
-            station,
-            text="Add your Icecast or SHOUTcast connection details to continue.",
-            style="CardMuted.TLabel",
-        )
-        self.station_detail.pack(anchor="w")
-        self.server_status_frame = ttk.Frame(station, style="Card.TFrame")
-        self.server_status_frame.pack(fill="x", pady=(10, 0))
-        self.server_status_labels: dict[str, tuple[ttk.Label, ttk.Label]] = {}
-        station_actions = ttk.Frame(station, style="Card.TFrame")
-        station_actions.pack(fill="x", pady=(12, 0))
-        station_actions.columnconfigure(2, weight=1)
-        ttk.Label(
-            station_actions,
-            text="Quality",
-            style="CardMuted.TLabel",
-        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(meters, text="L", style="CardMuted.TLabel").grid(row=0, column=0)
+        ttk.Label(meters, text="R", style="CardMuted.TLabel").grid(row=0, column=1)
+        self.left_meter = VerticalLevelMeter(meters)
+        self.left_meter.grid(row=1, column=0, padx=(0, 8), pady=(5, 0))
+        self.right_meter = VerticalLevelMeter(meters)
+        self.right_meter.grid(row=1, column=1, pady=(5, 0))
+
+        stream = self._card(self.dashboard_body)
+        stream.grid(row=0, column=1, sticky="nsew", padx=(6, 0), pady=(0, 6))
+        ttk.Label(stream, text="Stream Settings", style="CardTitle.TLabel").pack(anchor="w")
         self.quality_var = tk.StringVar(value=self.config.quality)
         self.quality_combo = ttk.Combobox(
-            station_actions,
+            stream,
             textvariable=self.quality_var,
             values=list(QUALITY_PRESETS),
             state="readonly",
-            width=15,
         )
-        self.quality_combo.grid(row=0, column=1, sticky="w", padx=(10, 0))
+        self.quality_combo.pack(fill="x", pady=(8, 3))
         self.quality_combo.bind("<<ComboboxSelected>>", self._quality_selected)
         self.quality_detail = ttk.Label(
-            station_actions,
+            stream,
             text=self._quality_description(self.config.quality),
             style="CardMuted.TLabel",
         )
-        self.quality_detail.grid(row=0, column=2, sticky="w", padx=(10, 0))
-        self.test_server_button = ttk.Button(
-            station_actions,
-            text="Test connection",
-            command=lambda: self.test_server(self.config.selected_server()),
-        )
-        self.test_server_button.grid(row=0, column=3, rowspan=2, sticky="e")
-
-        ttk.Label(
-            station_actions,
-            text="Sample rate",
-            style="CardMuted.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(10, 0))
+        self.quality_detail.pack(anchor="w")
         sample_rate_label = next(
             (
                 label
@@ -1261,61 +1406,180 @@ class SimpleCastApp(tk.Tk):
         )
         self.sample_rate_var = tk.StringVar(value=sample_rate_label)
         self.sample_rate_combo = ttk.Combobox(
-            station_actions,
+            stream,
             textvariable=self.sample_rate_var,
             values=list(SAMPLE_RATES),
             state="readonly",
-            width=15,
         )
-        self.sample_rate_combo.grid(
-            row=1,
-            column=1,
-            sticky="w",
-            padx=(10, 0),
-            pady=(10, 0),
-        )
+        self.sample_rate_combo.pack(fill="x", pady=(6, 3))
         self.sample_rate_combo.bind(
             "<<ComboboxSelected>>",
             self._sample_rate_selected,
         )
-        ttk.Label(
-            station_actions,
-            text="Audio sent to listeners",
+        self.station_name = ttk.Label(
+            stream,
+            text="No station added",
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 11),
+        )
+        self.station_detail = ttk.Label(
+            stream,
+            text="Add a station to continue.",
             style="CardMuted.TLabel",
-        ).grid(row=1, column=2, sticky="w", padx=(10, 0), pady=(10, 0))
+            wraplength=370,
+        )
+        self.server_status_frame = ttk.Frame(stream, style="Card.TFrame")
+        self.server_status_frame.pack(fill="x", pady=(6, 0))
+        self.server_status_labels: dict[str, tuple[ttk.Label, ttk.Label]] = {}
+        self.test_server_button = ttk.Button(
+            stream,
+            text="Test connection",
+            command=lambda: self.test_server(self.config.selected_server()),
+        )
+        self.test_server_button.pack(anchor="e", pady=(6, 0))
+
+        metadata = self._card(self.dashboard_body)
+        metadata.grid(row=1, column=1, sticky="nsew", padx=(6, 0), pady=(6, 0))
+        ttk.Label(metadata, text="Now Playing", style="CardTitle.TLabel").pack(anchor="w")
+        self.song_var = tk.StringVar()
+        self.artist_var = tk.StringVar()
+        self.title_var = tk.StringVar()
+        ttk.Label(metadata, text="Artist", style="CardMuted.TLabel").pack(
+            anchor="w", pady=(7, 2)
+        )
+        self.artist_entry = ttk.Entry(metadata, textvariable=self.artist_var)
+        self.artist_entry.pack(fill="x")
+        ttk.Label(metadata, text="Title", style="CardMuted.TLabel").pack(
+            anchor="w", pady=(5, 2)
+        )
+        self.title_entry = ttk.Entry(metadata, textvariable=self.title_var)
+        self.title_entry.pack(fill="x")
+        self.metadata_button = ttk.Button(
+            metadata,
+            text="SEND NOW PLAYING",
+            command=self.send_metadata,
+        )
+        self.metadata_button.pack(anchor="e", pady=(7, 0))
+
+        action_row = ttk.Frame(root)
+        action_row.pack(fill="x", pady=(6, 0))
+        preview_actions = ttk.Frame(action_row)
+        preview_actions.pack(side="left")
+        self.sound_button = ttk.Button(
+            preview_actions,
+            text="🔊  Test my sound",
+            command=self.test_sound,
+        )
+        self.sound_button.pack(side="left")
+        self.play_original_button = ttk.Button(
+            preview_actions,
+            text="Play original",
+            command=lambda: self._play_test_file(self.last_test_path),
+            state="disabled",
+        )
+        self.play_original_button.pack(side="left", padx=(8, 0))
+        self.play_processed_button = ttk.Button(
+            preview_actions,
+            text="Play processed",
+            command=lambda: self._play_test_file(self.processed_test_path),
+            state="disabled",
+        )
+        self.play_processed_button.pack(side="left", padx=(8, 0))
+        self.broadcast_button = ttk.Button(
+            action_row,
+            text="▶  START BROADCAST",
+            style="Broadcast.TButton",
+            command=self.toggle_broadcast,
+        )
+        self.broadcast_button.pack(side="right", fill="x", expand=True, padx=(30, 0))
+        self.detail_label = ttk.Label(
+            root,
+            text="Ready to broadcast",
+            style="Muted.TLabel",
+            anchor="e",
+        )
+
+    def _build_recordings_page(self, root: ttk.Frame) -> None:
+        ttk.Label(root, text="Recordings", style="PageTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            root,
+            text="Capture a 320 kbps MP3 locally, with or without broadcasting.",
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(2, 18))
+        recording = self._card(root)
+        recording.pack(fill="x")
+        recording_top = ttk.Frame(recording, style="Card.TFrame")
+        recording_top.pack(fill="x")
+        ttk.Label(
+            recording_top,
+            text="Local recording",
+            style="CardTitle.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            recording_top,
+            text=f"MP3 · {RECORDING_BITRATE} kbps",
+            style="CardMuted.TLabel",
+        ).pack(side="right")
+        folder_row = ttk.Frame(recording, style="Card.TFrame")
+        folder_row.pack(fill="x", pady=(14, 10))
+        self.recording_folder_var = tk.StringVar(value=str(self._recording_folder()))
+        self.recording_folder_entry = ttk.Entry(
+            folder_row,
+            textvariable=self.recording_folder_var,
+            state="readonly",
+        )
+        self.recording_folder_entry.pack(side="left", fill="x", expand=True)
+        self.recording_folder_button = ttk.Button(
+            folder_row,
+            text="Choose folder",
+            command=self.choose_recording_folder,
+        )
+        self.recording_folder_button.pack(side="right", padx=(10, 0))
+        recording_actions = ttk.Frame(recording, style="Card.TFrame")
+        recording_actions.pack(fill="x")
+        self.record_broadcasts_var = tk.BooleanVar(value=self.config.record_broadcasts)
+        self.record_broadcasts_check = ttk.Checkbutton(
+            recording_actions,
+            text="Record every broadcast",
+            variable=self.record_broadcasts_var,
+            command=self._record_broadcasts_changed,
+            style="Card.TCheckbutton",
+        )
+        self.record_broadcasts_check.pack(side="left")
+        self.recording_button = ttk.Button(
+            recording_actions,
+            text="Record without broadcasting",
+            command=self.toggle_recording,
+        )
+        self.recording_button.pack(side="right")
+
+    def _build_settings_page(self, root: ttk.Frame) -> None:
+        ttk.Label(root, text="Settings", style="PageTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            root,
+            text="Automation, optional metadata-file integration, and support tools.",
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(2, 18))
 
         metadata = self._card(root)
         metadata.pack(fill="x", pady=(0, 12))
-        ttk.Label(metadata, text="NOW PLAYING (OPTIONAL)", style="CardTitle.TLabel").pack(
-            anchor="w"
-        )
-        metadata_row = ttk.Frame(metadata, style="Card.TFrame")
-        metadata_row.pack(fill="x", pady=(12, 0))
-        self.song_var = tk.StringVar()
-        self.song_entry = ttk.Entry(metadata_row, textvariable=self.song_var)
-        self.song_entry.pack(side="left", fill="x", expand=True)
-        self.song_entry.insert(0, "")
-        self.metadata_button = ttk.Button(
-            metadata_row,
-            text="Send title",
-            command=self.send_metadata,
-        )
-        self.metadata_button.pack(side="right", padx=(10, 0))
-
+        ttk.Label(
+            metadata,
+            text="Automatic metadata from a text file",
+            style="CardTitle.TLabel",
+        ).pack(anchor="w")
         metadata_auto_row = ttk.Frame(metadata, style="Card.TFrame")
         metadata_auto_row.pack(fill="x", pady=(12, 0))
         self.metadata_auto_var = tk.BooleanVar(value=self.config.metadata_auto)
         self.metadata_auto_check = ttk.Checkbutton(
             metadata_auto_row,
-            text="Automatic from text file",
+            text="Enable text-file updates",
             variable=self.metadata_auto_var,
             command=self._metadata_auto_changed,
             style="Card.TCheckbutton",
         )
         self.metadata_auto_check.pack(side="left")
-        self.metadata_format_var = tk.StringVar(
-            value=self.config.metadata_format
-        )
+        self.metadata_format_var = tk.StringVar(value=self.config.metadata_format)
         self.metadata_format_combo = ttk.Combobox(
             metadata_auto_row,
             textvariable=self.metadata_format_var,
@@ -1328,7 +1592,6 @@ class SimpleCastApp(tk.Tk):
             "<<ComboboxSelected>>",
             self._metadata_format_changed,
         )
-
         metadata_file_row = ttk.Frame(metadata, style="Card.TFrame")
         metadata_file_row.pack(fill="x", pady=(8, 0))
         self.metadata_file_var = tk.StringVar(
@@ -1353,76 +1616,14 @@ class SimpleCastApp(tk.Tk):
         )
         self.metadata_status_label.pack(anchor="w", pady=(7, 0))
 
-        recording = self._card(root)
-        recording.pack(fill="x", pady=(0, 12))
-        recording_top = ttk.Frame(recording, style="Card.TFrame")
-        recording_top.pack(fill="x")
-        ttk.Label(
-            recording_top,
-            text="LOCAL RECORDING",
-            style="CardTitle.TLabel",
-        ).pack(side="left")
-        ttk.Label(
-            recording_top,
-            text=f"MP3 · {RECORDING_BITRATE} kbps",
-            style="CardMuted.TLabel",
-        ).pack(side="right")
-
-        folder_row = ttk.Frame(recording, style="Card.TFrame")
-        folder_row.pack(fill="x", pady=(12, 8))
-        self.recording_folder_var = tk.StringVar(
-            value=str(self._recording_folder())
-        )
-        self.recording_folder_entry = ttk.Entry(
-            folder_row,
-            textvariable=self.recording_folder_var,
-            state="readonly",
-        )
-        self.recording_folder_entry.pack(side="left", fill="x", expand=True)
-        self.recording_folder_button = ttk.Button(
-            folder_row,
-            text="Choose folder",
-            command=self.choose_recording_folder,
-        )
-        self.recording_folder_button.pack(side="right", padx=(10, 0))
-
-        recording_actions = ttk.Frame(recording, style="Card.TFrame")
-        recording_actions.pack(fill="x")
-        self.record_broadcasts_var = tk.BooleanVar(
-            value=self.config.record_broadcasts
-        )
-        self.record_broadcasts_check = ttk.Checkbutton(
-            recording_actions,
-            text="Record every broadcast",
-            variable=self.record_broadcasts_var,
-            command=self._record_broadcasts_changed,
-            style="Card.TCheckbutton",
-        )
-        self.record_broadcasts_check.pack(side="left")
-        self.recording_status_label = ttk.Label(
-            recording_actions,
-            text="Not recording",
-            style="CardMuted.TLabel",
-        )
-        self.recording_status_label.pack(side="left", padx=(16, 0))
-        self.recording_button = ttk.Button(
-            recording_actions,
-            text="Record without broadcasting",
-            command=self.toggle_recording,
-        )
-        self.recording_button.pack(side="right")
-
         automation = self._card(root)
         automation.pack(fill="x", pady=(0, 12))
         ttk.Label(
             automation,
-            text="STARTUP AUTOMATION",
+            text="Startup automation",
             style="CardTitle.TLabel",
         ).pack(anchor="w")
-        automation_options = ttk.Frame(
-            automation,
-            style="Card.TFrame",
-        )
+        automation_options = ttk.Frame(automation, style="Card.TFrame")
         automation_options.pack(fill="x", pady=(12, 0))
         self.start_with_windows_var = tk.BooleanVar(
             value=self.config.start_with_windows
@@ -1434,9 +1635,7 @@ class SimpleCastApp(tk.Tk):
             command=self._start_with_windows_changed,
             style="Card.TCheckbutton",
         ).grid(row=0, column=0, sticky="w")
-        self.start_minimized_var = tk.BooleanVar(
-            value=self.config.start_minimized
-        )
+        self.start_minimized_var = tk.BooleanVar(value=self.config.start_minimized)
         ttk.Checkbutton(
             automation_options,
             text="Start minimized to the tray",
@@ -1444,9 +1643,7 @@ class SimpleCastApp(tk.Tk):
             command=self._startup_setting_changed,
             style="Card.TCheckbutton",
         ).grid(row=1, column=0, sticky="w", pady=(7, 0))
-        self.auto_broadcast_var = tk.BooleanVar(
-            value=self.config.auto_broadcast
-        )
+        self.auto_broadcast_var = tk.BooleanVar(value=self.config.auto_broadcast)
         ttk.Checkbutton(
             automation_options,
             text="Automatically start broadcasting",
@@ -1481,45 +1678,46 @@ class SimpleCastApp(tk.Tk):
             self._startup_setting_changed,
         )
         automation_options.columnconfigure(0, weight=1)
-        ttk.Label(
-            automation,
-            text=(
-                "Automatic broadcasting is off by default. “Record every "
-                "broadcast” also applies to automatic starts."
-            ),
-            style="CardMuted.TLabel",
-        ).pack(anchor="w", pady=(10, 0))
 
-        self.broadcast_button = ttk.Button(
-            root,
-            text="START BROADCAST",
-            style="Broadcast.TButton",
-            command=self.toggle_broadcast,
-        )
-        self.broadcast_button.pack(fill="x")
-        self.detail_label = ttk.Label(
-            root,
-            text="Ready to broadcast",
-            style="Muted.TLabel",
-            anchor="center",
-        )
-        self.detail_label.pack(fill="x", pady=(10, 0))
-
-        footer = ttk.Frame(root)
-        footer.pack(fill="x", pady=(12, 0))
-        ttk.Button(footer, text="Export support report", command=self.export_report).pack(
-            side="left"
-        )
+        support = self._card(root)
+        support.pack(fill="x")
+        ttk.Label(support, text="Support", style="CardTitle.TLabel").pack(anchor="w")
+        support_actions = ttk.Frame(support, style="Card.TFrame")
+        support_actions.pack(fill="x", pady=(12, 0))
         ttk.Button(
-            footer,
+            support_actions,
+            text="Export support report",
+            command=self.export_report,
+        ).pack(side="left")
+        ttk.Button(
+            support_actions,
             text="Run readiness check",
             command=self.run_readiness_check,
         ).pack(side="left", padx=(8, 0))
         ttk.Label(
-            footer,
-            text=f"SimpleCast {__version__} · Icecast + SHOUTcast MP3",
-            style="Muted.TLabel",
+            support_actions,
+            text="Icecast + SHOUTcast MP3",
+            style="CardMuted.TLabel",
         ).pack(side="right")
+
+    def _show_page(self, page_name: str) -> None:
+        page = self.pages.get(page_name)
+        if page is None:
+            return
+        for current in self.pages.values():
+            current.pack_forget()
+        page.pack(fill="both", expand=True)
+        for name, button in self.nav_buttons.items():
+            button.configure(
+                style="NavActive.TButton" if name == page_name else "Nav.TButton"
+            )
+        self.content_canvas.yview_moveto(0)
+        self.after(
+            0,
+            lambda: self.content_canvas.configure(
+                scrollregion=self.content_canvas.bbox("all")
+            ),
+        )
 
     def save_config(self) -> None:
         try:
@@ -1692,7 +1890,7 @@ class SimpleCastApp(tk.Tk):
         self.startup_banner.pack(
             fill="x",
             pady=(0, 12),
-            before=self.sound_card,
+            before=self.dashboard_body,
         )
         self._automatic_start_tick()
         if self._launched_by_windows and self.config.start_minimized:
@@ -2394,36 +2592,57 @@ class SimpleCastApp(tk.Tk):
 
     @staticmethod
     def _quick_station_label(server: ServerProfile) -> str:
-        return f"★  {server.name}  ·  {server.host}:{server.port}"
+        return f"★  {server.name}"
 
     def _refresh_quick_stations(self) -> None:
-        favorites = self.config.favorite_servers()
-        self.quick_station_ids = [server.id for server in favorites]
-        labels = [self._quick_station_label(server) for server in favorites]
-        self.quick_station_combo.configure(values=labels)
-        if not favorites:
-            self.quick_station_var.set("Star stations in Manage stations")
-            self.quick_station_combo.configure(state="disabled")
-            return
-
+        for child in self.favorite_grid.winfo_children():
+            child.destroy()
+        self.favorite_buttons = []
+        favorites = self.config.favorite_servers()[:6]
         enabled_ids = self.config.enabled_server_ids
-        if len(enabled_ids) == 1 and enabled_ids[0] in self.quick_station_ids:
-            self.quick_station_combo.current(
-                self.quick_station_ids.index(enabled_ids[0])
+        selected_id = enabled_ids[0] if len(enabled_ids) == 1 else ""
+        for index in range(6):
+            row, column = divmod(index, 3)
+            if index < len(favorites):
+                server = favorites[index]
+                selected = server.id == selected_id
+                button = ttk.Button(
+                    self.favorite_grid,
+                    text=(
+                        f"{self._quick_station_label(server)}     ✓"
+                        if selected
+                        else self._quick_station_label(server)
+                    ),
+                    style=(
+                        "FavoriteSelected.TButton"
+                        if selected
+                        else "Favorite.TButton"
+                    ),
+                    command=lambda server_id=server.id: (
+                        self._select_favorite_station(server_id)
+                    ),
+                    state="disabled" if self.stream.active else "normal",
+                )
+            else:
+                button = ttk.Button(
+                    self.favorite_grid,
+                    text="☆  Add favorite",
+                    style="Favorite.TButton",
+                    command=self.manage_servers,
+                    state="disabled" if self.stream.active else "normal",
+                )
+            button.grid(
+                row=row,
+                column=column,
+                sticky="ew",
+                padx=(0 if column == 0 else 5, 0 if column == 2 else 5),
+                pady=(0 if row == 0 else 5, 5 if row == 0 else 0),
             )
-        else:
-            self.quick_station_var.set("Choose a favorite for the next broadcast…")
-        self.quick_station_combo.configure(
-            state="disabled" if self.stream.active else "readonly"
-        )
+            self.favorite_buttons.append(button)
 
-    def _quick_station_selected(self, _event: object = None) -> None:
+    def _select_favorite_station(self, server_id: str) -> None:
         if self.stream.active:
             return
-        index = self.quick_station_combo.current()
-        if not (0 <= index < len(self.quick_station_ids)):
-            return
-        server_id = self.quick_station_ids[index]
         # Quick switching intentionally chooses one destination. Multi-station
         # broadcasting remains available through Manage stations.
         if not self.config.select_only_server(server_id):
@@ -2758,6 +2977,14 @@ class SimpleCastApp(tk.Tk):
             text=f"● {state.value.upper()}",
             foreground=colors[state],
         )
+        self.sidebar_connection_label.configure(
+            text=(
+                "●  Connection ready"
+                if state == BroadcastState.OFFLINE
+                else f"●  {state.value.title()}"
+            ),
+            foreground=colors[state],
+        )
         self.detail_label.configure(text=detail)
         self.sleep_preventer.set_broadcasting(state != BroadcastState.OFFLINE)
         try:
@@ -2789,7 +3016,7 @@ class SimpleCastApp(tk.Tk):
                 )
             self.broadcast_button.configure(
                 state="normal",
-                text="START BROADCAST",
+                text="▶  START BROADCAST",
                 style="Broadcast.TButton",
             )
             self.sound_button.configure(state="normal")
@@ -2813,7 +3040,7 @@ class SimpleCastApp(tk.Tk):
         else:
             self.broadcast_button.configure(
                 state="normal",
-                text="STOP BROADCAST",
+                text="■  STOP BROADCAST",
                 style="Stop.TButton",
             )
             self.sound_button.configure(state="disabled")
@@ -2828,7 +3055,7 @@ class SimpleCastApp(tk.Tk):
             self.recording_folder_button.configure(state="disabled")
             self.record_broadcasts_check.configure(state="disabled")
             self.manage_servers_button.configure(state="disabled")
-            self.quick_station_combo.configure(state="disabled")
+            self._refresh_quick_stations()
 
     def _update_timer(self) -> None:
         if self.stream.started_at:
@@ -2860,14 +3087,18 @@ class SimpleCastApp(tk.Tk):
         self.after(500, self._update_timer)
 
     def send_metadata(self) -> None:
-        song = self.song_var.get().strip()
+        song = format_manual_now_playing(
+            self.artist_var.get(),
+            self.title_var.get(),
+        )
         if not song:
             messagebox.showinfo(
                 "Now playing",
-                "Enter an artist/title first.",
+                "Enter an artist or title first.",
                 parent=self,
             )
             return
+        self.song_var.set(song)
         enabled = self.config.enabled_servers()
         online = (
             set(self.stream.online_server_ids)

@@ -165,6 +165,8 @@ class AppConfig:
             for server_id in raw_favorites:
                 normalized_id = str(server_id)
                 if (
+                    len(favorite_server_ids) < 6
+                    and
                     normalized_id not in favorite_server_ids
                     and any(server.id == normalized_id for server in servers)
                 ):

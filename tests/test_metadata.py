@@ -9,6 +9,7 @@ from unittest.mock import patch
 from simplecast.metadata import (
     MetadataDeliveryEngine,
     MetadataFileWatcher,
+    format_manual_now_playing,
     format_metadata_text,
     send_now_playing,
 )
@@ -26,6 +27,14 @@ class FakeResponse:
 
 
 class MetadataTests(unittest.TestCase):
+    def test_formats_manual_artist_and_title_fields(self) -> None:
+        self.assertEqual(
+            format_manual_now_playing("  Artist  Name ", " Track   Title "),
+            "Artist Name - Track Title",
+        )
+        self.assertEqual(format_manual_now_playing("", "Track Title"), "Track Title")
+        self.assertEqual(format_manual_now_playing("Artist", ""), "Artist")
+
     @patch("simplecast.metadata.urllib.request.urlopen", return_value=FakeResponse())
     def test_shoutcast_metadata_uses_sid_and_source_password(self, urlopen) -> None:
         server = ServerProfile(

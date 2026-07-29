@@ -19,6 +19,17 @@ METADATA_FORMATS = (
 )
 
 
+def format_manual_now_playing(artist: str, title: str) -> str:
+    return " - ".join(
+        part
+        for part in (
+            " ".join(artist.strip().split()),
+            " ".join(title.strip().split()),
+        )
+        if part
+    )
+
+
 def send_now_playing(
     server: ServerProfile,
     password: str,

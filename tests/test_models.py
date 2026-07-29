@@ -104,25 +104,30 @@ class ServerProfileTests(unittest.TestCase):
         self.assertEqual(config.enabled_server_ids, [server.id])
 
     def test_favorites_are_validated_and_deduplicated(self) -> None:
-        first = ServerProfile(name="First", host="one.example")
-        second = ServerProfile(name="Second", host="two.example")
+        servers = [
+            ServerProfile(name=f"Station {index}", host=f"{index}.example")
+            for index in range(8)
+        ]
+        first, second = servers[:2]
         config = AppConfig.from_dict(
             {
-                "servers": [first.to_dict(), second.to_dict()],
+                "servers": [server.to_dict() for server in servers],
                 "favorite_server_ids": [
                     second.id,
                     "missing",
                     second.id,
                     first.id,
+                    *[server.id for server in servers[2:]],
                 ],
             }
         )
         self.assertEqual(
-            config.favorite_server_ids,
+            config.favorite_server_ids[:2],
             [second.id, first.id],
         )
+        self.assertEqual(len(config.favorite_server_ids), 6)
         self.assertEqual(
-            [server.id for server in config.favorite_servers()],
+            [server.id for server in config.favorite_servers()[:2]],
             [first.id, second.id],
         )
 
