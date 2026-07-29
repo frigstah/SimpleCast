@@ -8,6 +8,8 @@ on the shortest safe route to air:
 3. Add and test one or more Icecast or SHOUTcast servers.
 4. Start broadcasting MP3 audio.
 
+New to internet radio? Follow the [SimpleCast quick-start guide](QUICK_START.md).
+
 ## Run from source
 
 Requirements:

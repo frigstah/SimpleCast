@@ -31,6 +31,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $distRoot = Join-Path $projectRoot "dist\SimpleCast"
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination $distRoot
+Copy-Item -LiteralPath (Join-Path $projectRoot "QUICK_START.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "TRADEMARKS.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $distRoot
@@ -39,7 +40,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "docs\ROADMAP.md") -Destination $
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\CERTIFICATION.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\RELEASE_CHECKLIST.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\PRIVACY.md") -Destination $distRoot
-Copy-Item -LiteralPath (Join-Path $projectRoot "docs\BUILD_PROVENANCE_0.9.0.md") -Destination $distRoot
+Copy-Item -LiteralPath (Join-Path $projectRoot "docs\BUILD_PROVENANCE_0.9.0-beta.2.md") -Destination $distRoot
 
 $applicationHash = (Get-FileHash `
   -LiteralPath (Join-Path $distRoot "SimpleCast.exe") `
