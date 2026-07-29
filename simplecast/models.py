@@ -74,6 +74,7 @@ class AppConfig:
     selected_device_name: str = ""
     selected_server_id: str = ""
     enabled_server_ids: list[str] = field(default_factory=list)
+    favorite_server_ids: list[str] = field(default_factory=list)
     quality: str = "SL Standard"
     output_sample_rate: int = 44100
     audio_system: str = "Automatic"
@@ -158,6 +159,16 @@ class AppConfig:
                 if any(server.id == selected_server_id for server in servers)
                 else []
             )
+        raw_favorites = value.get("favorite_server_ids", [])
+        favorite_server_ids = []
+        if isinstance(raw_favorites, list):
+            for server_id in raw_favorites:
+                normalized_id = str(server_id)
+                if (
+                    normalized_id not in favorite_server_ids
+                    and any(server.id == normalized_id for server in servers)
+                ):
+                    favorite_server_ids.append(normalized_id)
         if not any(server.id == selected_server_id for server in servers):
             selected_server_id = servers[0].id if servers else ""
         return cls(
@@ -165,6 +176,7 @@ class AppConfig:
             selected_device_name=value.get("selected_device_name", ""),
             selected_server_id=selected_server_id,
             enabled_server_ids=enabled_server_ids,
+            favorite_server_ids=favorite_server_ids,
             quality=quality,
             output_sample_rate=output_sample_rate,
             audio_system=audio_system,
@@ -191,6 +203,7 @@ class AppConfig:
             "selected_device_name": self.selected_device_name,
             "selected_server_id": self.selected_server_id,
             "enabled_server_ids": self.enabled_server_ids,
+            "favorite_server_ids": self.favorite_server_ids,
             "quality": self.quality,
             "output_sample_rate": self.output_sample_rate,
             "audio_system": self.audio_system,
@@ -217,3 +230,14 @@ class AppConfig:
     def enabled_servers(self) -> list[ServerProfile]:
         enabled = set(self.enabled_server_ids)
         return [server for server in self.servers if server.id in enabled]
+
+    def favorite_servers(self) -> list[ServerProfile]:
+        favorites = set(self.favorite_server_ids)
+        return [server for server in self.servers if server.id in favorites]
+
+    def select_only_server(self, server_id: str) -> bool:
+        if not any(server.id == server_id for server in self.servers):
+            return False
+        self.selected_server_id = server_id
+        self.enabled_server_ids = [server_id]
+        return True

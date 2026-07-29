@@ -103,6 +103,43 @@ class ServerProfileTests(unittest.TestCase):
         )
         self.assertEqual(config.enabled_server_ids, [server.id])
 
+    def test_favorites_are_validated_and_deduplicated(self) -> None:
+        first = ServerProfile(name="First", host="one.example")
+        second = ServerProfile(name="Second", host="two.example")
+        config = AppConfig.from_dict(
+            {
+                "servers": [first.to_dict(), second.to_dict()],
+                "favorite_server_ids": [
+                    second.id,
+                    "missing",
+                    second.id,
+                    first.id,
+                ],
+            }
+        )
+        self.assertEqual(
+            config.favorite_server_ids,
+            [second.id, first.id],
+        )
+        self.assertEqual(
+            [server.id for server in config.favorite_servers()],
+            [first.id, second.id],
+        )
+
+    def test_quick_switch_selects_one_valid_broadcast_destination(self) -> None:
+        first = ServerProfile(name="First", host="one.example")
+        second = ServerProfile(name="Second", host="two.example")
+        config = AppConfig(
+            selected_server_id=first.id,
+            enabled_server_ids=[first.id, second.id],
+            servers=[first, second],
+        )
+        self.assertTrue(config.select_only_server(second.id))
+        self.assertEqual(config.selected_server_id, second.id)
+        self.assertEqual(config.enabled_server_ids, [second.id])
+        self.assertFalse(config.select_only_server("missing"))
+        self.assertEqual(config.enabled_server_ids, [second.id])
+
 
 class ConfigStoreTests(unittest.TestCase):
     def test_round_trip_does_not_contain_password(self) -> None:
@@ -112,6 +149,7 @@ class ConfigStoreTests(unittest.TestCase):
             config = AppConfig(
                 selected_server_id=server.id,
                 enabled_server_ids=[server.id],
+                favorite_server_ids=[server.id],
                 input_volume_percent=135,
                 processing_preset="Voice",
                 recording_folder=r"D:\Radio Recordings",
@@ -135,6 +173,7 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertEqual(loaded.recording_folder, r"D:\Radio Recordings")
             self.assertTrue(loaded.record_broadcasts)
             self.assertEqual(loaded.enabled_servers()[0].id, server.id)
+            self.assertEqual(loaded.favorite_servers()[0].id, server.id)
             self.assertEqual(
                 loaded.metadata_file,
                 r"D:\Automation\now-playing.txt",

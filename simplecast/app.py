@@ -416,18 +416,20 @@ class ServerManager(tk.Toplevel):
         ).pack(anchor="w", pady=(4, 16))
         self.tree = ttk.Treeview(
             frame,
-            columns=("name", "type", "address", "status"),
+            columns=("name", "favorite", "type", "address", "status"),
             show="headings",
             selectmode="browse",
         )
         self.tree.heading("name", text="STATION")
+        self.tree.heading("favorite", text="FAVORITE")
         self.tree.heading("type", text="CONNECTION")
         self.tree.heading("address", text="ADDRESS")
         self.tree.heading("status", text="BROADCAST")
-        self.tree.column("name", width=170)
-        self.tree.column("type", width=120)
-        self.tree.column("address", width=280)
-        self.tree.column("status", width=105, anchor="center")
+        self.tree.column("name", width=145)
+        self.tree.column("favorite", width=78, anchor="center")
+        self.tree.column("type", width=105)
+        self.tree.column("address", width=225)
+        self.tree.column("status", width=95, anchor="center")
         self.tree.pack(fill="both", expand=True)
         self.tree.bind("<Double-1>", lambda _event: self.edit())
 
@@ -438,6 +440,11 @@ class ServerManager(tk.Toplevel):
             text="Include / exclude",
             command=self.toggle_enabled,
         ).pack(side="left")
+        ttk.Button(
+            actions,
+            text="★ Favorite",
+            command=self.toggle_favorite,
+        ).pack(side="left", padx=(8, 0))
         ttk.Button(actions, text="Edit", command=self.edit).pack(side="left", padx=8)
         ttk.Button(actions, text="Test", command=self.test).pack(side="left")
         ttk.Button(actions, text="Delete", command=self.delete).pack(side="left", padx=8)
@@ -472,11 +479,16 @@ class ServerManager(tk.Toplevel):
                 if server.id in self.app.config.enabled_server_ids
                 else "☐ Excluded"
             )
+            favorite = (
+                "★ Yes"
+                if server.id in self.app.config.favorite_server_ids
+                else "☆ No"
+            )
             self.tree.insert(
                 "",
                 "end",
                 iid=server.id,
-                values=(server.name, connection, address, selected),
+                values=(server.name, favorite, connection, address, selected),
             )
         if self.app.config.selected_server_id in self.tree.get_children():
             self.tree.selection_set(self.app.config.selected_server_id)
@@ -525,6 +537,19 @@ class ServerManager(tk.Toplevel):
         self.refresh()
         self.app.refresh_station()
 
+    def toggle_favorite(self) -> None:
+        profile = self.selected_profile()
+        if not profile:
+            messagebox.showinfo("Choose a station", "Select a station first.", parent=self)
+            return
+        if profile.id in self.app.config.favorite_server_ids:
+            self.app.config.favorite_server_ids.remove(profile.id)
+        else:
+            self.app.config.favorite_server_ids.append(profile.id)
+        self.app.save_config()
+        self.refresh()
+        self.app.refresh_station()
+
     def test(self) -> None:
         profile = self.selected_profile()
         if profile:
@@ -543,6 +568,8 @@ class ServerManager(tk.Toplevel):
         self.app.config.servers.remove(profile)
         if profile.id in self.app.config.enabled_server_ids:
             self.app.config.enabled_server_ids.remove(profile.id)
+        if profile.id in self.app.config.favorite_server_ids:
+            self.app.config.favorite_server_ids.remove(profile.id)
         self.app.store.delete_password(profile.id)
         if self.app.config.selected_server_id == profile.id:
             self.app.config.selected_server_id = (
@@ -961,7 +988,7 @@ class SimpleCastApp(tk.Tk):
         ttk.Label(title_group, text="SimpleCast", style="Hero.TLabel").pack(anchor="w")
         ttk.Label(
             title_group,
-            text="Internet radio without the guesswork",
+            text="Broadcasting without all the fuzz",
             style="Muted.TLabel",
         ).pack(anchor="w")
         status_group = ttk.Frame(header)
@@ -1151,13 +1178,34 @@ class SimpleCastApp(tk.Tk):
             command=self.manage_servers,
         )
         self.manage_servers_button.pack(side="right")
+        quick_station_row = ttk.Frame(station, style="Card.TFrame")
+        quick_station_row.pack(fill="x", pady=(14, 2))
+        ttk.Label(
+            quick_station_row,
+            text="Quick station",
+            width=13,
+            style="CardMuted.TLabel",
+        ).pack(side="left")
+        self.quick_station_var = tk.StringVar()
+        self.quick_station_combo = ttk.Combobox(
+            quick_station_row,
+            textvariable=self.quick_station_var,
+            state="disabled",
+            width=38,
+        )
+        self.quick_station_combo.pack(side="left", fill="x", expand=True)
+        self.quick_station_combo.bind(
+            "<<ComboboxSelected>>",
+            self._quick_station_selected,
+        )
+        self.quick_station_ids: list[str] = []
         self.station_name = ttk.Label(
             station,
             text="No station added",
             style="Card.TLabel",
             font=("Segoe UI Semibold", 13),
         )
-        self.station_name.pack(anchor="w", pady=(14, 2))
+        self.station_name.pack(anchor="w", pady=(12, 2))
         self.station_detail = ttk.Label(
             station,
             text="Add your Icecast or SHOUTcast connection details to continue.",
@@ -2344,7 +2392,47 @@ class SimpleCastApp(tk.Tk):
     def manage_servers(self) -> None:
         ServerManager(self)
 
+    @staticmethod
+    def _quick_station_label(server: ServerProfile) -> str:
+        return f"★  {server.name}  ·  {server.host}:{server.port}"
+
+    def _refresh_quick_stations(self) -> None:
+        favorites = self.config.favorite_servers()
+        self.quick_station_ids = [server.id for server in favorites]
+        labels = [self._quick_station_label(server) for server in favorites]
+        self.quick_station_combo.configure(values=labels)
+        if not favorites:
+            self.quick_station_var.set("Star stations in Manage stations")
+            self.quick_station_combo.configure(state="disabled")
+            return
+
+        enabled_ids = self.config.enabled_server_ids
+        if len(enabled_ids) == 1 and enabled_ids[0] in self.quick_station_ids:
+            self.quick_station_combo.current(
+                self.quick_station_ids.index(enabled_ids[0])
+            )
+        else:
+            self.quick_station_var.set("Choose a favorite for the next broadcast…")
+        self.quick_station_combo.configure(
+            state="disabled" if self.stream.active else "readonly"
+        )
+
+    def _quick_station_selected(self, _event: object = None) -> None:
+        if self.stream.active:
+            return
+        index = self.quick_station_combo.current()
+        if not (0 <= index < len(self.quick_station_ids)):
+            return
+        server_id = self.quick_station_ids[index]
+        # Quick switching intentionally chooses one destination. Multi-station
+        # broadcasting remains available through Manage stations.
+        if not self.config.select_only_server(server_id):
+            return
+        self.save_config()
+        self.refresh_station()
+
     def refresh_station(self) -> None:
+        self._refresh_quick_stations()
         for child in self.server_status_frame.winfo_children():
             child.destroy()
         self.server_status_labels = {}
@@ -2720,6 +2808,7 @@ class SimpleCastApp(tk.Tk):
             self.recording_folder_button.configure(state="normal")
             self.record_broadcasts_check.configure(state="normal")
             self.manage_servers_button.configure(state="normal")
+            self._refresh_quick_stations()
             self._start_meter()
         else:
             self.broadcast_button.configure(
@@ -2739,6 +2828,7 @@ class SimpleCastApp(tk.Tk):
             self.recording_folder_button.configure(state="disabled")
             self.record_broadcasts_check.configure(state="disabled")
             self.manage_servers_button.configure(state="disabled")
+            self.quick_station_combo.configure(state="disabled")
 
     def _update_timer(self) -> None:
         if self.stream.started_at:
