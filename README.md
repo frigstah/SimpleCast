@@ -61,6 +61,7 @@ adjacent `_internal` directory.
 - Cancellable startup countdown and saved-device readiness waiting
 - Sanitized support-report export
 - In-app beta-readiness check for audio, encoder, folders, stations, and signing
+- User-initiated GitHub update checks with verified installer downloads
 - Repeatable real-time MP3 encoder soak and release-check tooling
 
 ## Current limitations

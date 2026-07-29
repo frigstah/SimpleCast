@@ -5,6 +5,7 @@ import math
 import os
 import platform
 import ctypes
+import subprocess
 import sys
 import tempfile
 import threading
@@ -54,6 +55,11 @@ from .streaming import (
 from .startup import set_start_with_windows
 from .support import sanitize_support_text
 from .tray import TrayController
+from .updater import (
+    UpdateRelease,
+    check_for_update,
+    download_installer,
+)
 from .windows import SleepPreventer
 
 
@@ -714,6 +720,8 @@ class SimpleCastApp(tk.Tk):
         self.listener_counts: dict[str, int] = {}
         self.listener_errors: dict[str, str] = {}
         self._listener_polling: set[str] = set()
+        self._available_update: UpdateRelease | None = None
+        self._update_download_active = False
         self.tray = TrayController(
             lambda: self.after(0, self.show_window),
             lambda: self.after(0, self._tray_toggle_broadcast),
@@ -1702,6 +1710,32 @@ class SimpleCastApp(tk.Tk):
         )
         automation_options.columnconfigure(0, weight=1)
 
+        updates = self._card(root)
+        updates.pack(fill="x", pady=(0, 12))
+        update_top = ttk.Frame(updates, style="Card.TFrame")
+        update_top.pack(fill="x")
+        ttk.Label(
+            update_top,
+            text="Software updates",
+            style="CardTitle.TLabel",
+        ).pack(side="left")
+        self.update_button = ttk.Button(
+            update_top,
+            text="Check for updates",
+            command=self.check_for_updates,
+        )
+        self.update_button.pack(side="right")
+        self.update_status_label = ttk.Label(
+            updates,
+            text=(
+                f"Installed version: {__version__}. "
+                "Updates are checked only when you click the button."
+            ),
+            style="CardMuted.TLabel",
+            wraplength=780,
+        )
+        self.update_status_label.pack(anchor="w", pady=(10, 0))
+
         support = self._card(root)
         support.pack(fill="x")
         ttk.Label(support, text="Support", style="CardTitle.TLabel").pack(anchor="w")
@@ -1747,6 +1781,218 @@ class SimpleCastApp(tk.Tk):
             self.store.save(self.config)
         except OSError as error:
             messagebox.showerror("Could not save settings", str(error), parent=self)
+
+    def check_for_updates(self) -> None:
+        if self._update_download_active:
+            return
+        self.update_button.configure(state="disabled", text="Checking…")
+        self.update_status_label.configure(
+            text="Checking published SimpleCast releases on GitHub…",
+            foreground=COLORS["muted"],
+        )
+
+        def worker() -> None:
+            try:
+                release = check_for_update(
+                    __version__,
+                    include_prereleases="-" in __version__,
+                )
+                error = ""
+            except Exception as problem:
+                logging.warning("Update check failed: %s", problem)
+                release = None
+                error = str(problem) or "The update check failed"
+            try:
+                self.after(
+                    0,
+                    lambda: self._apply_update_check(release, error),
+                )
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_update_check(
+        self,
+        release: UpdateRelease | None,
+        error: str,
+    ) -> None:
+        if self._closing:
+            return
+        self.update_button.configure(
+            state="normal",
+            text="Check for updates",
+        )
+        if error:
+            self.update_status_label.configure(
+                text=f"Could not check for updates: {error}",
+                foreground=COLORS["error"],
+            )
+            return
+        if release is None:
+            self._available_update = None
+            self.update_status_label.configure(
+                text=f"SimpleCast {__version__} is up to date.",
+                foreground=COLORS["accent"],
+            )
+            return
+        self._available_update = release
+        self.update_status_label.configure(
+            text=(
+                f"SimpleCast {release.version} is available"
+                + (" as a beta release." if release.prerelease else ".")
+            ),
+            foreground=COLORS["accent"],
+        )
+        notes = " ".join(release.notes.strip().split())
+        if len(notes) > 900:
+            notes = f"{notes[:897]}…"
+        detail = (
+            f"Installed: {__version__}\n"
+            f"Available: {release.version}\n\n"
+        )
+        if notes:
+            detail += f"{notes}\n\n"
+        detail += (
+            "Download and verify the Windows installer now?\n\n"
+            "SimpleCast will ask again before launching it."
+        )
+        if messagebox.askyesno(
+            "SimpleCast update available",
+            detail,
+            parent=self,
+        ):
+            self._download_update(release)
+
+    def _download_update(self, release: UpdateRelease) -> None:
+        if self.stream.active or self.recording.active:
+            self.update_status_label.configure(
+                text=(
+                    f"Version {release.version} is available. Stop broadcasting "
+                    "or recording before installing it."
+                ),
+                foreground=COLORS["warning"],
+            )
+            messagebox.showinfo(
+                "Stop audio first",
+                (
+                    "Stop the broadcast or recording, then click "
+                    "Check for updates again."
+                ),
+                parent=self,
+            )
+            return
+        self._update_download_active = True
+        self.update_button.configure(state="disabled", text="Downloading…")
+        self.update_status_label.configure(
+            text=f"Downloading SimpleCast {release.version}…",
+            foreground=COLORS["muted"],
+        )
+
+        def worker() -> None:
+            last_percent = -1
+
+            def progress(received: int, total: int) -> None:
+                nonlocal last_percent
+                percent = min(100, int(received * 100 / max(1, total)))
+                if percent == last_percent:
+                    return
+                last_percent = percent
+                try:
+                    self.after(
+                        0,
+                        lambda: self._apply_update_progress(
+                            release.version,
+                            percent,
+                        ),
+                    )
+                except RuntimeError:
+                    pass
+
+            try:
+                path = download_installer(
+                    release,
+                    progress_callback=progress,
+                )
+                error = ""
+            except Exception as problem:
+                logging.warning("Update download failed: %s", problem)
+                path = None
+                error = str(problem) or "The update download failed"
+            try:
+                self.after(
+                    0,
+                    lambda: self._apply_update_download(
+                        release,
+                        path,
+                        error,
+                    ),
+                )
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_update_progress(self, version: str, percent: int) -> None:
+        if not self._closing and self._update_download_active:
+            self.update_status_label.configure(
+                text=f"Downloading SimpleCast {version}… {percent}%"
+            )
+
+    def _apply_update_download(
+        self,
+        release: UpdateRelease,
+        path: Path | None,
+        error: str,
+    ) -> None:
+        if self._closing:
+            return
+        self._update_download_active = False
+        self.update_button.configure(
+            state="normal",
+            text="Check for updates",
+        )
+        if error or path is None:
+            self.update_status_label.configure(
+                text=f"Could not prepare the update: {error}",
+                foreground=COLORS["error"],
+            )
+            return
+        self.update_status_label.configure(
+            text=(
+                f"SimpleCast {release.version} was downloaded and passed "
+                "SHA-256 verification."
+            ),
+            foreground=COLORS["accent"],
+        )
+        if messagebox.askyesno(
+            "Update ready to install",
+            (
+                f"SimpleCast {release.version} is verified and ready.\n\n"
+                "Launch the installer and close SimpleCast now?"
+            ),
+            parent=self,
+        ):
+            self._launch_update_installer(path)
+
+    def _launch_update_installer(self, path: Path) -> None:
+        if self.stream.active or self.recording.active:
+            messagebox.showinfo(
+                "Stop audio first",
+                "Stop broadcasting or recording before installing the update.",
+                parent=self,
+            )
+            return
+        try:
+            subprocess.Popen([str(path)], close_fds=True)
+        except OSError as error:
+            self.update_status_label.configure(
+                text=f"Could not launch the installer: {error}",
+                foreground=COLORS["error"],
+            )
+            return
+        logging.info("Verified update installer launched: %s", path.name)
+        self.close()
 
     def refresh_devices(self) -> None:
         try:

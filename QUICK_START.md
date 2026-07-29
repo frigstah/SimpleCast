@@ -153,6 +153,20 @@ Open **Recordings** in the sidebar to:
 - Record every broadcast automatically
 - Make a local 320 kbps MP3 without broadcasting
 
+## Update SimpleCast
+
+1. Open **Settings**.
+2. Find **Software updates**.
+3. Press **Check for updates**.
+4. If a newer version is available, review the version and release notes.
+5. Choose to download it.
+6. SimpleCast verifies the installer with GitHub's SHA-256 digest.
+7. Confirm when you are ready to close SimpleCast and launch the installer.
+
+Update checks happen only when you press the button. Stop broadcasting or
+recording before installing an update. During the beta period, SimpleCast also
+offers newer beta releases.
+
 ## If something does not work
 
 ### No audio on the meters
