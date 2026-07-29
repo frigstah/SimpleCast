@@ -65,8 +65,10 @@ adjacent `_internal` directory.
 - Sanitized support-report export
 - In-app beta-readiness check for audio, encoder, folders, stations, and signing
 - User-initiated GitHub update checks with verified installer downloads
-- Three persistent appearance themes: Modern & sleek, Classic SimpleCast, and
-  Beginner friendly
+- Four complete persistent skins: Classic SimpleCast, Broadcast Console,
+  Studio Workspace, and Studio Dark
+- Three appearance variations inside the Classic SimpleCast skin: Modern &
+  sleek, Classic SimpleCast, and Beginner friendly
 - Repeatable real-time MP3 encoder soak and release-check tooling
 
 ## Current limitations
@@ -237,6 +239,10 @@ its WDM-KS driver on the current test machine.
 - The GPL-3.0-or-later license and unsigned-beta policy are now documented.
   Qualified FFmpeg review and the long-duration external matrix remain gates.
 - Added the SIMP Windows application and installer icon.
+- Added four full interface skins with different navigation and workspace
+  layouts while preserving every broadcasting control.
+- Skin changes are saved and use a controlled restart after audio, metadata,
+  and tray components have shut down cleanly.
 
 ## Distribution note
 
@@ -258,4 +264,4 @@ an official SimpleCast release. See `TRADEMARKS.md`.
 The current beta binaries are intentionally unsigned. Windows may display a
 SmartScreen or Smart App Control warning; verify downloads using the published
 SHA-256 checksums. Build details are recorded in
-`docs/BUILD_PROVENANCE_0.9.0.md`.
+`docs/BUILD_PROVENANCE_0.9.0-beta.7.md`.

@@ -79,6 +79,16 @@ class ServerProfileTests(unittest.TestCase):
             "Classic SimpleCast",
         )
 
+    def test_ui_skin_is_saved_and_invalid_values_use_classic(self) -> None:
+        self.assertEqual(
+            AppConfig.from_dict({"ui_skin": "Studio Dark"}).ui_skin,
+            "Studio Dark",
+        )
+        self.assertEqual(
+            AppConfig.from_dict({"ui_skin": "Unknown"}).ui_skin,
+            "Classic SimpleCast",
+        )
+
     def test_old_quality_names_are_migrated(self) -> None:
         self.assertEqual(
             AppConfig.from_dict({"quality": "Standard"}).quality,
@@ -196,6 +206,7 @@ class ConfigStoreTests(unittest.TestCase):
                 auto_broadcast=True,
                 startup_delay_seconds=30,
                 ui_theme="Beginner friendly",
+                ui_skin="Studio Workspace",
                 servers=[server],
             )
             store.save(config)
@@ -223,6 +234,7 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertTrue(loaded.auto_broadcast)
             self.assertEqual(loaded.startup_delay_seconds, 30)
             self.assertEqual(loaded.ui_theme, "Beginner friendly")
+            self.assertEqual(loaded.ui_skin, "Studio Workspace")
 
     def test_broken_config_is_recovered(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

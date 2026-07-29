@@ -98,14 +98,25 @@ mark each required server as **Included**.
 
 ## Choose an appearance
 
-Open **Settings** and use the **Appearance** list:
+Open **Settings → Appearance** and choose a complete interface skin:
 
-- **Modern & sleek** — compact charcoal design with cyan highlights
-- **Classic SimpleCast** — the familiar navy beta design
+- **Classic SimpleCast** — the familiar sidebar layout
+- **Broadcast Console** — a compact dark broadcasting console
+- **Studio Workspace** — a spacious light studio with top navigation
+- **Studio Dark** — the studio workflow in a dark control-room style
+
+Changing the skin changes the complete layout, so SimpleCast offers to restart
+after saving your choice. Broadcasting or recording must be stopped first.
+
+The **Classic SimpleCast** skin also includes the existing appearance
+variations:
+
+- **Modern & sleek** — compact charcoal colors with cyan highlights
+- **Classic SimpleCast** — the familiar navy colors
 - **Beginner friendly** — bright, high-contrast colors with larger controls
 
-The selected theme is applied immediately and remembered the next time
-SimpleCast starts.
+Classic variation changes apply immediately. All skin and variation choices are
+remembered.
 
 Closed dropdown fields ignore the mouse wheel so hovering cannot accidentally
 change a setting. Open a dropdown first when you want to scroll through a long

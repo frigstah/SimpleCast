@@ -106,6 +106,7 @@ class AppConfig:
     start_minimized: bool = False
     auto_broadcast: bool = False
     startup_delay_seconds: int = 10
+    ui_skin: str = "Classic SimpleCast"
     ui_theme: str = "Classic SimpleCast"
     servers: list[ServerProfile] = field(default_factory=list)
 
@@ -163,6 +164,14 @@ class AppConfig:
             "Beginner friendly",
         }:
             ui_theme = "Classic SimpleCast"
+        ui_skin = str(value.get("ui_skin", "Classic SimpleCast"))
+        if ui_skin not in {
+            "Classic SimpleCast",
+            "Broadcast Console",
+            "Studio Workspace",
+            "Studio Dark",
+        }:
+            ui_skin = "Classic SimpleCast"
         servers = [
             ServerProfile.from_dict(item)
             for item in value.get("servers", [])
@@ -221,6 +230,7 @@ class AppConfig:
             start_minimized=bool(value.get("start_minimized", False)),
             auto_broadcast=bool(value.get("auto_broadcast", False)),
             startup_delay_seconds=startup_delay_seconds,
+            ui_skin=ui_skin,
             ui_theme=ui_theme,
             servers=servers,
         )
@@ -246,6 +256,7 @@ class AppConfig:
             "start_minimized": self.start_minimized,
             "auto_broadcast": self.auto_broadcast,
             "startup_delay_seconds": self.startup_delay_seconds,
+            "ui_skin": self.ui_skin,
             "ui_theme": self.ui_theme,
             "servers": [server.to_dict() for server in self.servers],
         }

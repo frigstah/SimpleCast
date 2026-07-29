@@ -1,3 +1,3 @@
 """SimpleCast Windows internet-radio encoder."""
 
-__version__ = "0.9.0-beta.6"
+__version__ = "0.9.0-beta.7"

@@ -30,7 +30,9 @@ Updated: 2026-07-29
 
 | Check | Result |
 | --- | --- |
-| Automated test suite | Pass (67 tests) |
+| Automated test suite | Pass (68 tests) |
+| Four-skin functional UI smoke test | Pass |
+| Controlled skin-change restart | Pass (one clean relaunch) |
 | Processing-preview FFmpeg render | Pass (all four presets) |
 | Readiness FFmpeg capability detection | Pass |
 | Credential redaction regression test | Pass |
