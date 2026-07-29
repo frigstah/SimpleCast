@@ -43,6 +43,8 @@ adjacent `_internal` directory.
 - Named Icecast 2, SHOUTcast 1, and SHOUTcast 2-compatible server profiles
 - Dashboard server dropdown with direct Add, Edit, Delete, and advanced Manage
   stations actions
+- A full Stations page for favorites, multi-destination inclusion, editing,
+  connection testing, and deletion
 - Six persistent favorite-station shortcuts
 - Simultaneous broadcasting to multiple included server profiles
 - TLS, host, port, mount, username, password, and SHOUTcast SID support
@@ -67,8 +69,12 @@ adjacent `_internal` directory.
 - User-initiated GitHub update checks with verified installer downloads
 - Four complete persistent skins: Classic SimpleCast, Broadcast Console,
   Studio Workspace, and Studio Dark
+- Studio Dark is the default for new installations
 - Three appearance variations inside the Classic SimpleCast skin: Modern &
   sleek, Classic SimpleCast, and Beginner friendly
+- Optional confirmation before the Stop Broadcast button ends a stream
+- A themed integrated Windows frame with SIMP branding and built-in window
+  controls
 - Repeatable real-time MP3 encoder soak and release-check tooling
 
 ## Current limitations
@@ -264,4 +270,4 @@ an official SimpleCast release. See `TRADEMARKS.md`.
 The current beta binaries are intentionally unsigned. Windows may display a
 SmartScreen or Smart App Control warning; verify downloads using the published
 SHA-256 checksums. Build details are recorded in
-`docs/BUILD_PROVENANCE_0.9.0-beta.7.md`.
+`docs/BUILD_PROVENANCE_0.9.0-beta.8.md`.

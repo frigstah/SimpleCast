@@ -30,8 +30,11 @@ Updated: 2026-07-29
 
 | Check | Result |
 | --- | --- |
-| Automated test suite | Pass (68 tests) |
+| Automated test suite | Pass (72 tests) |
 | Four-skin functional UI smoke test | Pass |
+| Integrated title bar maximize/restore and clean close | Pass (all four skins) |
+| Embedded Stations page and six-row station refresh | Pass (all four skins) |
+| Immediate stop with confirmation disabled | Pass |
 | Controlled skin-change restart | Pass (one clean relaunch) |
 | Processing-preview FFmpeg render | Pass (all four presets) |
 | Readiness FFmpeg capability detection | Pass |

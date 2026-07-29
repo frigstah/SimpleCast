@@ -96,6 +96,9 @@ broadcast. A check mark shows the selected favorite.
 To broadcast to several servers at the same time, use **Manage stations** and
 mark each required server as **Included**.
 
+**Manage stations** opens the full **Stations** page. You can also reach that
+page directly from the Stations navigation tab.
+
 ## Choose an appearance
 
 Open **Settings → Appearance** and choose a complete interface skin:
@@ -104,6 +107,8 @@ Open **Settings → Appearance** and choose a complete interface skin:
 - **Broadcast Console** — a compact dark broadcasting console
 - **Studio Workspace** — a spacious light studio with top navigation
 - **Studio Dark** — the studio workflow in a dark control-room style
+
+Studio Dark is selected by default on a new installation.
 
 Changing the skin changes the complete layout, so SimpleCast offers to restart
 after saving your choice. Broadcasting or recording must be stopped first.
@@ -158,6 +163,11 @@ Before going live, check that:
 
 Press **START BROADCAST**. The status changes while SimpleCast connects and then
 shows **ON AIR**. To finish, press **STOP BROADCAST** and confirm.
+
+If you prefer the Stop Broadcast button to end immediately, open
+**Settings → Broadcast controls** and turn off
+**Ask for confirmation before stopping a broadcast**. Closing SimpleCast while
+live still asks for confirmation.
 
 ### See your live listeners and personal best
 

@@ -14,6 +14,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from PIL import Image, ImageTk
+
 from . import __version__
 from .audio import (
     AUDIO_SYSTEMS,
@@ -248,6 +250,10 @@ SKIN_WINDOW_SIZES = {
 }
 
 COLORS = dict(THEMES["Classic SimpleCast"]["colors"])
+CUSTOM_TITLEBAR_HEIGHT = 32
+FOOTER_TAGLINE = (
+    "Software devoloped by BenDover Sporg - Please provide feedback in IM"
+)
 
 SAMPLE_RATES = {
     "32 kHz": 32000,
@@ -609,33 +615,39 @@ class ServerDialog(tk.Toplevel):
         self.destroy()
 
 
-class ServerManager(tk.Toplevel):
-    def __init__(self, parent: "SimpleCastApp") -> None:
+class StationManagerPage(ttk.Frame):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        app: "SimpleCastApp",
+    ) -> None:
         super().__init__(parent)
-        self.app = parent
-        self.title("Manage stations")
-        self.geometry("880x470")
-        self.configure(background=COLORS["bg"])
-        self.transient(parent)
+        self.app = app
         self._build()
         self.refresh()
-        _fit_window(self, 880, 470, 660, 400)
 
     def _build(self) -> None:
-        frame = ttk.Frame(self, padding=24)
+        frame = ttk.Frame(self)
         frame.pack(fill="both", expand=True)
         heading = ttk.Frame(frame)
         heading.pack(fill="x")
-        ttk.Label(heading, text="Your stations", style="Title.TLabel").pack(side="left")
+        ttk.Label(
+            heading,
+            text="Stations",
+            style="PageTitle.TLabel",
+        ).pack(side="left")
         ttk.Button(
             heading,
             text="+ Add station",
             style="Accent.TButton",
-            command=lambda: ServerDialog(self, None, "", self._save),
+            command=lambda: ServerDialog(self.app, None, "", self._save),
         ).pack(side="right")
         ttk.Label(
             frame,
-            text="Include one or more stations in the next broadcast.",
+            text=(
+                "Choose favorites and include one or more destinations "
+                "in the next broadcast."
+            ),
             style="Muted.TLabel",
         ).pack(anchor="w", pady=(4, 16))
         self.tree = ttk.Treeview(
@@ -681,7 +693,6 @@ class ServerManager(tk.Toplevel):
         ttk.Button(actions, text="Edit", command=self.edit).pack(side="left", padx=8)
         ttk.Button(actions, text="Test", command=self.test).pack(side="left")
         ttk.Button(actions, text="Delete", command=self.delete).pack(side="left", padx=8)
-        ttk.Button(actions, text="Close", command=self.destroy).pack(side="right")
 
     def selected_profile(self) -> ServerProfile | None:
         selection = self.tree.selection()
@@ -754,10 +765,14 @@ class ServerManager(tk.Toplevel):
     def edit(self) -> None:
         profile = self.selected_profile()
         if not profile:
-            messagebox.showinfo("Choose a station", "Select a station to edit.", parent=self)
+            messagebox.showinfo(
+                "Choose a station",
+                "Select a station to edit.",
+                parent=self.app,
+            )
             return
         ServerDialog(
-            self,
+            self.app,
             profile,
             self.app.store.get_password(profile.id),
             self._save,
@@ -766,7 +781,11 @@ class ServerManager(tk.Toplevel):
     def toggle_enabled(self) -> None:
         profile = self.selected_profile()
         if not profile:
-            messagebox.showinfo("Choose a station", "Select a station first.", parent=self)
+            messagebox.showinfo(
+                "Choose a station",
+                "Select a station first.",
+                parent=self.app,
+            )
             return
         self.app.config.selected_server_id = profile.id
         if profile.id in self.app.config.enabled_server_ids:
@@ -780,7 +799,11 @@ class ServerManager(tk.Toplevel):
     def toggle_favorite(self) -> None:
         profile = self.selected_profile()
         if not profile:
-            messagebox.showinfo("Choose a station", "Select a station first.", parent=self)
+            messagebox.showinfo(
+                "Choose a station",
+                "Select a station first.",
+                parent=self.app,
+            )
             return
         if profile.id in self.app.config.favorite_server_ids:
             self.app.config.favorite_server_ids.remove(profile.id)
@@ -792,7 +815,7 @@ class ServerManager(tk.Toplevel):
                         "SimpleCast shows up to six favorite stations on the "
                         "dashboard. Remove one favorite before adding another."
                     ),
-                    parent=self,
+                    parent=self.app,
                 )
                 return
             self.app.config.favorite_server_ids.append(profile.id)
@@ -803,7 +826,7 @@ class ServerManager(tk.Toplevel):
     def test(self) -> None:
         profile = self.selected_profile()
         if profile:
-            self.app.test_server(profile, parent=self)
+            self.app.test_server(profile, parent=self.app)
 
     def delete(self) -> None:
         profile = self.selected_profile()
@@ -812,7 +835,7 @@ class ServerManager(tk.Toplevel):
         if not messagebox.askyesno(
             "Delete station?",
             f"Remove “{profile.name}” from SimpleCast?",
-            parent=self,
+            parent=self.app,
         ):
             return
         self.app.config.servers.remove(profile)
@@ -851,12 +874,17 @@ class SimpleCastApp(tk.Tk):
         except tk.TclError:
             pass
         self.title(f"SimpleCast {__version__}")
+        self.configure(background=COLORS["bg"])
+        self._brand_images: dict[int, ImageTk.PhotoImage] = {}
+        self._custom_chrome_enabled = self._enable_custom_window_chrome()
         preferred_width, preferred_height, minimum_width, minimum_height = (
             SKIN_WINDOW_SIZES[self.active_skin]
         )
+        if self._custom_chrome_enabled:
+            preferred_height += CUSTOM_TITLEBAR_HEIGHT
+            minimum_height += CUSTOM_TITLEBAR_HEIGHT
         self.geometry(f"{preferred_width}x{preferred_height}")
         self.minsize(minimum_width, minimum_height)
-        self.configure(background=COLORS["bg"])
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.gain = GainControl(self.config.input_volume_percent)
         self.audio = AudioEngine(self.gain)
@@ -940,6 +968,259 @@ class SimpleCastApp(tk.Tk):
         self.after(50, self._poll_meter_levels)
         self.after(1200, self._poll_listener_stats)
         self.after(400, self._apply_launch_automation)
+
+    @staticmethod
+    def _windows_colorref(hex_color: str) -> int:
+        value = hex_color.lstrip("#")
+        red, green, blue = (
+            int(value[0:2], 16),
+            int(value[2:4], 16),
+            int(value[4:6], 16),
+        )
+        return red | (green << 8) | (blue << 16)
+
+    def _enable_custom_window_chrome(self) -> bool:
+        if platform.system() != "Windows":
+            return False
+        try:
+            self.update_idletasks()
+            user32 = ctypes.windll.user32
+            get_parent = user32.GetParent
+            get_parent.argtypes = [ctypes.c_void_p]
+            get_parent.restype = ctypes.c_void_p
+            widget_handle = ctypes.c_void_p(self.winfo_id())
+            parent_handle = get_parent(widget_handle)
+            hwnd = ctypes.c_void_p(
+                parent_handle or self.winfo_id()
+            )
+            long_pointer = (
+                ctypes.c_longlong
+                if ctypes.sizeof(ctypes.c_void_p) == 8
+                else ctypes.c_long
+            )
+            get_style = user32.GetWindowLongPtrW
+            get_style.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            get_style.restype = long_pointer
+            set_style = user32.SetWindowLongPtrW
+            set_style.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_int,
+                long_pointer,
+            ]
+            set_style.restype = long_pointer
+            style = int(get_style(hwnd, -16))
+            ws_caption = 0x00C00000
+            ws_thickframe = 0x00040000
+            ws_minimizebox = 0x00020000
+            ws_maximizebox = 0x00010000
+            ws_sysmenu = 0x00080000
+            style = (
+                (style & ~ws_caption)
+                | ws_thickframe
+                | ws_minimizebox
+                | ws_maximizebox
+                | ws_sysmenu
+            )
+            set_style(hwnd, -16, long_pointer(style))
+            set_window_pos = user32.SetWindowPos
+            set_window_pos.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_void_p,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_uint,
+            ]
+            set_window_pos.restype = ctypes.c_int
+            set_window_pos(
+                hwnd,
+                None,
+                0,
+                0,
+                0,
+                0,
+                0x0001 | 0x0002 | 0x0004 | 0x0020,
+            )
+            self._custom_window_handle = hwnd
+            self._set_window_border_color()
+            return True
+        except (AttributeError, OSError, ValueError):
+            logging.exception("Could not enable the integrated window frame")
+            return False
+
+    def _set_window_border_color(self) -> None:
+        hwnd = getattr(self, "_custom_window_handle", 0)
+        if not hwnd or platform.system() != "Windows":
+            return
+        try:
+            color = ctypes.c_int(self._windows_colorref(COLORS["line"]))
+            set_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+            set_attribute.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_uint,
+                ctypes.c_void_p,
+                ctypes.c_uint,
+            ]
+            set_attribute.restype = ctypes.c_long
+            set_attribute(
+                hwnd,
+                34,
+                ctypes.byref(color),
+                ctypes.sizeof(color),
+            )
+        except (AttributeError, OSError, ValueError):
+            logging.debug("Windows border color could not be changed")
+
+    def _brand_photo(self, size: int) -> ImageTk.PhotoImage:
+        cached = self._brand_images.get(size)
+        if cached is not None:
+            return cached
+        with Image.open(
+            _resource_path("assets", "simplecast-icon.png")
+        ) as source:
+            resized = source.convert("RGBA").resize(
+                (size, size),
+                Image.Resampling.LANCZOS,
+            )
+        photo = ImageTk.PhotoImage(resized)
+        self._brand_images[size] = photo
+        return photo
+
+    def _build_custom_titlebar(self, parent: tk.Misc) -> None:
+        bar = tk.Frame(
+            parent,
+            background=COLORS["bg"],
+            height=CUSTOM_TITLEBAR_HEIGHT,
+        )
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+        icon = tk.Label(
+            bar,
+            image=self._brand_photo(20),
+            background=COLORS["bg"],
+            borderwidth=0,
+        )
+        icon.pack(side="left", padx=(9, 7))
+        title = tk.Label(
+            bar,
+            text=f"SimpleCast {__version__}",
+            background=COLORS["bg"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI", 9),
+        )
+        title.pack(side="left")
+        drag_area = tk.Frame(bar, background=COLORS["bg"])
+        drag_area.pack(side="left", fill="both", expand=True)
+
+        close_button = tk.Button(
+            bar,
+            text="×",
+            command=self.close,
+            background=COLORS["bg"],
+            foreground=COLORS["text"],
+            activebackground=COLORS["error"],
+            activeforeground=COLORS["error_text"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 13),
+            width=5,
+        )
+        close_button.pack(side="right", fill="y")
+        self._titlebar_maximize_button = tk.Button(
+            bar,
+            text="□",
+            command=self._toggle_maximize,
+            background=COLORS["bg"],
+            foreground=COLORS["text"],
+            activebackground=COLORS["surface_hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 10),
+            width=5,
+        )
+        self._titlebar_maximize_button.pack(side="right", fill="y")
+        minimize_button = tk.Button(
+            bar,
+            text="—",
+            command=self.iconify,
+            background=COLORS["bg"],
+            foreground=COLORS["text"],
+            activebackground=COLORS["surface_hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 10),
+            width=5,
+        )
+        minimize_button.pack(side="right", fill="y")
+        self._titlebar_widgets = {
+            "bar": bar,
+            "icon": icon,
+            "title": title,
+            "drag": drag_area,
+            "minimize": minimize_button,
+            "maximize": self._titlebar_maximize_button,
+            "close": close_button,
+        }
+        for widget in (bar, icon, title, drag_area):
+            widget.bind("<ButtonPress-1>", self._titlebar_drag_start)
+            widget.bind("<B1-Motion>", self._titlebar_drag_move)
+            widget.bind("<Double-Button-1>", self._toggle_maximize)
+
+    def _titlebar_drag_start(self, event: tk.Event) -> None:
+        if self.wm_state() == "zoomed":
+            return
+        self._titlebar_drag_offset = (
+            event.x_root - self.winfo_x(),
+            event.y_root - self.winfo_y(),
+        )
+
+    def _titlebar_drag_move(self, event: tk.Event) -> None:
+        if self.wm_state() == "zoomed":
+            return
+        offset = getattr(self, "_titlebar_drag_offset", None)
+        if offset is None:
+            return
+        self.geometry(
+            f"+{event.x_root - offset[0]}+{event.y_root - offset[1]}"
+        )
+
+    def _toggle_maximize(self, _event: object = None) -> None:
+        if self.wm_state() == "zoomed":
+            self.wm_state("normal")
+            symbol = "□"
+        else:
+            self.wm_state("zoomed")
+            symbol = "❐"
+        if hasattr(self, "_titlebar_maximize_button"):
+            self._titlebar_maximize_button.configure(text=symbol)
+
+    def _refresh_custom_titlebar_colors(self) -> None:
+        widgets = getattr(self, "_titlebar_widgets", None)
+        if not widgets:
+            return
+        for name in ("bar", "icon", "drag"):
+            widgets[name].configure(background=COLORS["bg"])
+        widgets["title"].configure(
+            background=COLORS["bg"],
+            foreground=COLORS["muted"],
+        )
+        for name in ("minimize", "maximize"):
+            widgets[name].configure(
+                background=COLORS["bg"],
+                foreground=COLORS["text"],
+                activebackground=COLORS["surface_hover"],
+                activeforeground=COLORS["text"],
+            )
+        widgets["close"].configure(
+            background=COLORS["bg"],
+            foreground=COLORS["text"],
+            activebackground=COLORS["error"],
+            activeforeground=COLORS["error_text"],
+        )
+        self._set_window_border_color()
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self)
@@ -1345,13 +1626,19 @@ class SimpleCastApp(tk.Tk):
         return ttk.Frame(parent, padding=16, style="Card.TFrame")
 
     def _build(self) -> None:
+        window = ttk.Frame(self)
+        window.pack(fill="both", expand=True)
+        if self._custom_chrome_enabled:
+            self._build_custom_titlebar(window)
+        shell_host = ttk.Frame(window)
+        shell_host.pack(fill="both", expand=True)
         if self.active_skin in {"Studio Workspace", "Studio Dark"}:
-            self._build_top_shell()
+            self._build_top_shell(shell_host)
         else:
-            self._build_sidebar_shell()
+            self._build_sidebar_shell(shell_host)
 
-    def _build_sidebar_shell(self) -> None:
-        shell = ttk.Frame(self)
+    def _build_sidebar_shell(self, parent: tk.Misc) -> None:
+        shell = ttk.Frame(parent)
         shell.pack(fill="both", expand=True)
         compact = self.active_skin == "Broadcast Console"
         sidebar_width = 176 if compact else 218
@@ -1373,7 +1660,9 @@ class SimpleCastApp(tk.Tk):
         brand.pack(fill="x")
         ttk.Label(
             brand,
-            text="SIMP" if compact else "◉  SimpleCast",
+            image=self._brand_photo(42 if compact else 38),
+            text="" if compact else "  SimpleCast",
+            compound="left",
             style="Sidebar.TLabel",
             font=("Segoe UI Semibold", 16 if compact else 18),
         ).pack(anchor="w")
@@ -1385,11 +1674,6 @@ class SimpleCastApp(tk.Tk):
             ("Recordings", "●"),
             ("Settings", "⚙"),
         ):
-            command = (
-                self.manage_servers
-                if page_name == "Stations"
-                else lambda name=page_name: self._show_page(name)
-            )
             button = ttk.Button(
                 sidebar,
                 text=(
@@ -1398,7 +1682,7 @@ class SimpleCastApp(tk.Tk):
                     else f"{icon}   {page_name}"
                 ),
                 style="Nav.TButton",
-                command=command,
+                command=lambda name=page_name: self._show_page(name),
             )
             button.pack(fill="x", padx=12, pady=2)
             self.nav_buttons[page_name] = button
@@ -1425,7 +1709,7 @@ class SimpleCastApp(tk.Tk):
         self.recording_status_label.pack(anchor="w", pady=(9, 15))
         ttk.Label(
             sidebar_footer,
-            text="By Doversoft,\nthank you for trying it out",
+            text=FOOTER_TAGLINE,
             style="SidebarMuted.TLabel",
             justify="left",
             wraplength=135 if compact else 175,
@@ -1505,17 +1789,19 @@ class SimpleCastApp(tk.Tk):
 
         self.pages = {
             "Dashboard": ttk.Frame(self.page_host),
+            "Stations": StationManagerPage(self.page_host, self),
             "Recordings": ttk.Frame(self.page_host),
             "Settings": ttk.Frame(self.page_host),
         }
+        self.station_manager = self.pages["Stations"]
         self.content_frame = self.pages["Dashboard"]
         self._build_dashboard(self.pages["Dashboard"])
         self._build_recordings_page(self.pages["Recordings"])
         self._build_settings_page(self.pages["Settings"])
         self._show_page("Dashboard")
 
-    def _build_top_shell(self) -> None:
-        shell = ttk.Frame(self)
+    def _build_top_shell(self, parent: tk.Misc) -> None:
+        shell = ttk.Frame(parent)
         shell.pack(fill="both", expand=True)
 
         topbar = ttk.Frame(shell, padding=(24, 10))
@@ -1524,10 +1810,8 @@ class SimpleCastApp(tk.Tk):
         brand.pack(side="left")
         ttk.Label(
             brand,
-            text="SIMP",
+            image=self._brand_photo(34),
             style="Title.TLabel",
-            foreground=COLORS["accent"],
-            font=("Segoe UI Semibold", 16),
         ).pack(side="left")
         ttk.Label(
             brand,
@@ -1556,7 +1840,7 @@ class SimpleCastApp(tk.Tk):
             navigation,
             text="Stations",
             style="TopNav.TButton",
-            command=self.manage_servers,
+            command=lambda: self._show_page("Stations"),
         )
         station_button.pack(side="left", padx=2)
         self.nav_buttons["Stations"] = station_button
@@ -1638,9 +1922,11 @@ class SimpleCastApp(tk.Tk):
 
         self.pages = {
             "Dashboard": ttk.Frame(self.page_host),
+            "Stations": StationManagerPage(self.page_host, self),
             "Recordings": ttk.Frame(self.page_host),
             "Settings": ttk.Frame(self.page_host),
         }
+        self.station_manager = self.pages["Stations"]
         self.content_frame = self.pages["Dashboard"]
         self._build_dashboard(self.pages["Dashboard"])
         self._build_recordings_page(self.pages["Recordings"])
@@ -1649,10 +1935,7 @@ class SimpleCastApp(tk.Tk):
         footer.pack(fill="x")
         ttk.Label(
             footer,
-            text=(
-                "By Doversoft, thank you for trying it out"
-                f"   ·   SimpleCast {__version__}"
-            ),
+            text=f"{FOOTER_TAGLINE}   ·   SimpleCast {__version__}",
             style="Muted.TLabel",
         ).pack()
         self._show_page("Dashboard")
@@ -2063,6 +2346,7 @@ class SimpleCastApp(tk.Tk):
         parent: tk.Misc,
         *,
         include_meters: bool,
+        include_gain_processing: bool = True,
     ) -> ttk.Frame:
         panel = self._card(parent)
         self.sound_card = panel
@@ -2118,60 +2402,8 @@ class SimpleCastApp(tk.Tk):
         )
         self.audio_api_status.pack(anchor="w", pady=(4, 8))
 
-        ttk.Label(
-            panel,
-            text="Input volume",
-            style="CardMuted.TLabel",
-        ).pack(anchor="w")
-        volume = ttk.Frame(panel, style="Card.TFrame")
-        volume.pack(fill="x", pady=(3, 8))
-        self.volume_var = tk.DoubleVar(value=self.config.input_volume_percent)
-        self.volume_slider = ttk.Scale(
-            volume,
-            from_=0,
-            to=200,
-            variable=self.volume_var,
-            command=self._volume_changed,
-        )
-        self.volume_slider.pack(side="left", fill="x", expand=True)
-        self.volume_label = ttk.Label(
-            volume,
-            text=f"{self.config.input_volume_percent}%",
-            width=6,
-            anchor="e",
-            style="Card.TLabel",
-        )
-        self.volume_label.pack(side="left", padx=(8, 0))
-        ttk.Button(
-            volume,
-            text="Reset",
-            command=self._reset_volume,
-        ).pack(side="left", padx=(8, 0))
-
-        ttk.Label(
-            panel,
-            text="Processing",
-            style="CardMuted.TLabel",
-        ).pack(anchor="w")
-        self.processing_var = tk.StringVar(value=self.config.processing_preset)
-        self.processing_combo = ttk.Combobox(
-            panel,
-            textvariable=self.processing_var,
-            values=list(PROCESSING_PRESETS),
-            state="readonly",
-        )
-        self.processing_combo.pack(fill="x", pady=(3, 3))
-        self.processing_combo.bind(
-            "<<ComboboxSelected>>",
-            self._processing_selected,
-        )
-        self.processing_detail = ttk.Label(
-            panel,
-            text=PROCESSING_PRESETS[self.config.processing_preset].description,
-            style="CardMuted.TLabel",
-            wraplength=330,
-        )
-        self.processing_detail.pack(anchor="w")
+        if include_gain_processing:
+            self._build_alt_gain_processing(panel, wraplength=330)
 
         if include_meters:
             meter_area = ttk.Frame(panel, style="Card.TFrame")
@@ -2234,8 +2466,75 @@ class SimpleCastApp(tk.Tk):
         )
         return panel
 
-    def _build_alt_signal_panel(self, parent: tk.Misc) -> ttk.Frame:
+    def _build_alt_gain_processing(
+        self,
+        parent: ttk.Frame,
+        *,
+        wraplength: int,
+    ) -> None:
+        ttk.Label(
+            parent,
+            text="Input volume",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w")
+        volume = ttk.Frame(parent, style="Card.TFrame")
+        volume.pack(fill="x", pady=(3, 8))
+        self.volume_var = tk.DoubleVar(value=self.config.input_volume_percent)
+        self.volume_slider = ttk.Scale(
+            volume,
+            from_=0,
+            to=200,
+            variable=self.volume_var,
+            command=self._volume_changed,
+        )
+        self.volume_slider.pack(side="left", fill="x", expand=True)
+        self.volume_label = ttk.Label(
+            volume,
+            text=f"{self.config.input_volume_percent}%",
+            width=6,
+            anchor="e",
+            style="Card.TLabel",
+        )
+        self.volume_label.pack(side="left", padx=(8, 0))
+        ttk.Button(
+            volume,
+            text="Reset",
+            command=self._reset_volume,
+        ).pack(side="left", padx=(8, 0))
+
+        ttk.Label(
+            parent,
+            text="Processing",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w")
+        self.processing_var = tk.StringVar(value=self.config.processing_preset)
+        self.processing_combo = ttk.Combobox(
+            parent,
+            textvariable=self.processing_var,
+            values=list(PROCESSING_PRESETS),
+            state="readonly",
+        )
+        self.processing_combo.pack(fill="x", pady=(3, 3))
+        self.processing_combo.bind(
+            "<<ComboboxSelected>>",
+            self._processing_selected,
+        )
+        self.processing_detail = ttk.Label(
+            parent,
+            text=PROCESSING_PRESETS[self.config.processing_preset].description,
+            style="CardMuted.TLabel",
+            wraplength=wraplength,
+        )
+        self.processing_detail.pack(anchor="w")
+
+    def _build_alt_signal_panel(
+        self,
+        parent: tk.Misc,
+        *,
+        include_gain_processing: bool = False,
+    ) -> ttk.Frame:
         panel = self._card(parent)
+        self.signal_card = panel
         ttk.Label(
             panel,
             text="Signal",
@@ -2280,13 +2579,22 @@ class SimpleCastApp(tk.Tk):
             style="CardMuted.TLabel",
             wraplength=520,
         ).pack(anchor="w", pady=(22, 0))
+        if include_gain_processing:
+            ttk.Separator(panel).pack(fill="x", pady=(20, 14))
+            ttk.Label(
+                panel,
+                text="Input controls",
+                style="CardTitle.TLabel",
+            ).pack(anchor="w", pady=(0, 10))
+            self._build_alt_gain_processing(panel, wraplength=520)
         return panel
 
     def _build_alt_on_air_panel(self, parent: tk.Misc) -> ttk.Frame:
         panel = self._card(parent)
+        self.quality_info_card = panel
         ttk.Label(
             panel,
-            text="On air",
+            text="Sound quality & Info",
             style="CardTitle.TLabel",
         ).pack(anchor="w")
         self.quality_var = tk.StringVar(value=self.config.quality)
@@ -2437,9 +2745,17 @@ class SimpleCastApp(tk.Tk):
         body.columnconfigure(1, weight=5, uniform="studio")
         body.columnconfigure(2, weight=3, uniform="studio")
         body.rowconfigure(0, weight=1)
-        source = self._build_alt_source_panel(body, include_meters=False)
+        studio_dark = self.active_skin == "Studio Dark"
+        source = self._build_alt_source_panel(
+            body,
+            include_meters=False,
+            include_gain_processing=not studio_dark,
+        )
         source.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        signal = self._build_alt_signal_panel(body)
+        signal = self._build_alt_signal_panel(
+            body,
+            include_gain_processing=studio_dark,
+        )
         signal.grid(row=0, column=1, sticky="nsew", padx=6)
         on_air = self._build_alt_on_air_panel(body)
         on_air.grid(row=0, column=2, sticky="nsew", padx=(6, 0))
@@ -2567,6 +2883,33 @@ class SimpleCastApp(tk.Tk):
         self.theme_description.pack(anchor="w", pady=(6, 0))
         if self.config.ui_skin != "Classic SimpleCast":
             self.theme_combo.configure(state="disabled")
+
+        broadcast_controls = self._card(root)
+        broadcast_controls.pack(fill="x", pady=(0, 12))
+        ttk.Label(
+            broadcast_controls,
+            text="Broadcast controls",
+            style="CardTitle.TLabel",
+        ).pack(anchor="w")
+        self.confirm_stop_var = tk.BooleanVar(
+            value=self.config.confirm_stop_broadcast
+        )
+        ttk.Checkbutton(
+            broadcast_controls,
+            text="Ask for confirmation before stopping a broadcast",
+            variable=self.confirm_stop_var,
+            command=self._confirm_stop_changed,
+            style="Card.TCheckbutton",
+        ).pack(anchor="w", pady=(12, 0))
+        ttk.Label(
+            broadcast_controls,
+            text=(
+                "Turn this off when the Stop Broadcast button should end "
+                "the stream immediately."
+            ),
+            style="CardMuted.TLabel",
+            wraplength=780,
+        ).pack(anchor="w", pady=(5, 0))
 
         metadata = self._card(root)
         metadata.pack(fill="x", pady=(0, 12))
@@ -2737,6 +3080,8 @@ class SimpleCastApp(tk.Tk):
         page = self.pages.get(page_name)
         if page is None:
             return
+        if page_name == "Stations":
+            self.station_manager.refresh()
         for current in self.pages.values():
             current.pack_forget()
         page.pack(fill="both", expand=True)
@@ -3092,6 +3437,10 @@ class SimpleCastApp(tk.Tk):
         self.play_processed_button.configure(state="disabled")
         self.save_config()
 
+    def _confirm_stop_changed(self) -> None:
+        self.config.confirm_stop_broadcast = self.confirm_stop_var.get()
+        self.save_config()
+
     def _skin_selected(self, _event: object = None) -> None:
         skin_name = self.skin_var.get()
         if skin_name not in SKINS:
@@ -3151,6 +3500,7 @@ class SimpleCastApp(tk.Tk):
         COLORS.update(THEMES[theme_name]["colors"])
         self.configure(background=COLORS["bg"])
         self._configure_styles()
+        self._refresh_custom_titlebar_colors()
         self.content_canvas.configure(background=COLORS["bg"])
         self.left_meter.configure(background=COLORS["surface"])
         self.right_meter.configure(background=COLORS["surface"])
@@ -3960,7 +4310,7 @@ class SimpleCastApp(tk.Tk):
         ).start()
 
     def manage_servers(self) -> None:
-        ServerManager(self)
+        self._show_page("Stations")
 
     def _server_choice_labels(self) -> dict[str, str]:
         labels: dict[str, str] = {}
@@ -4312,12 +4662,19 @@ class SimpleCastApp(tk.Tk):
         if self._auto_start_active:
             self.cancel_automatic_start()
         if self.stream.active:
-            if messagebox.askyesno(
-                "Stop broadcasting?",
-                "Listeners will immediately lose the live audio.",
-                parent=self,
-            ):
-                self.broadcast_button.configure(state="disabled", text="STOPPING…")
+            should_stop = (
+                not self.config.confirm_stop_broadcast
+                or messagebox.askyesno(
+                    "Stop broadcasting?",
+                    "Listeners will immediately lose the live audio.",
+                    parent=self,
+                )
+            )
+            if should_stop:
+                self.broadcast_button.configure(
+                    state="disabled",
+                    text="STOPPING…",
+                )
                 self.stream.stop()
             return
         if self.recording.active:
@@ -4792,6 +5149,11 @@ class SimpleCastApp(tk.Tk):
             f"Start minimized: {self.config.start_minimized}",
             f"Automatic broadcast: {self.config.auto_broadcast}",
             f"Startup delay: {self.config.startup_delay_seconds}s",
+            (
+                "Confirm broadcast stop: "
+                f"{self.config.confirm_stop_broadcast}"
+            ),
+            f"Interface skin: {self.config.ui_skin}",
             f"Log file: {self.log_path}",
             "",
             "Included servers (passwords are never included):",

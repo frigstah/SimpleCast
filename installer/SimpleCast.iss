@@ -1,5 +1,5 @@
 #define MyAppName "SimpleCast"
-#define MyAppVersion "0.9.0-beta.7"
+#define MyAppVersion "0.9.0-beta.8"
 #define MyAppPublisher "SimpleCast"
 #define MyAppExeName "SimpleCast.exe"
 

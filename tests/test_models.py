@@ -79,14 +79,23 @@ class ServerProfileTests(unittest.TestCase):
             "Classic SimpleCast",
         )
 
-    def test_ui_skin_is_saved_and_invalid_values_use_classic(self) -> None:
+    def test_ui_skin_is_saved_and_invalid_values_use_studio_dark(self) -> None:
         self.assertEqual(
             AppConfig.from_dict({"ui_skin": "Studio Dark"}).ui_skin,
             "Studio Dark",
         )
         self.assertEqual(
             AppConfig.from_dict({"ui_skin": "Unknown"}).ui_skin,
-            "Classic SimpleCast",
+            "Studio Dark",
+        )
+        self.assertEqual(AppConfig.from_dict({}).ui_skin, "Studio Dark")
+
+    def test_stop_broadcast_confirmation_is_saved(self) -> None:
+        self.assertTrue(AppConfig.from_dict({}).confirm_stop_broadcast)
+        self.assertFalse(
+            AppConfig.from_dict(
+                {"confirm_stop_broadcast": False}
+            ).confirm_stop_broadcast
         )
 
     def test_old_quality_names_are_migrated(self) -> None:
@@ -205,6 +214,7 @@ class ConfigStoreTests(unittest.TestCase):
                 start_minimized=True,
                 auto_broadcast=True,
                 startup_delay_seconds=30,
+                confirm_stop_broadcast=False,
                 ui_theme="Beginner friendly",
                 ui_skin="Studio Workspace",
                 servers=[server],
@@ -233,6 +243,7 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertTrue(loaded.start_minimized)
             self.assertTrue(loaded.auto_broadcast)
             self.assertEqual(loaded.startup_delay_seconds, 30)
+            self.assertFalse(loaded.confirm_stop_broadcast)
             self.assertEqual(loaded.ui_theme, "Beginner friendly")
             self.assertEqual(loaded.ui_skin, "Studio Workspace")
 
