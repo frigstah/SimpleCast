@@ -4,7 +4,14 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from simplecast.app import SimpleCastApp
+from simplecast.app import (
+    WS_CAPTION,
+    WS_MAXIMIZEBOX,
+    WS_MINIMIZEBOX,
+    WS_SYSMENU,
+    WS_THICKFRAME,
+    SimpleCastApp,
+)
 
 
 class BroadcastStopBehaviorTests(unittest.TestCase):
@@ -46,6 +53,24 @@ class BroadcastStopBehaviorTests(unittest.TestCase):
         ):
             SimpleCastApp.toggle_broadcast(app)
         stream.stop.assert_called_once_with()
+
+
+class WindowChromeTests(unittest.TestCase):
+    def test_integrated_style_removes_native_frame_drawing(self) -> None:
+        original = (
+            WS_CAPTION
+            | WS_THICKFRAME
+            | WS_MINIMIZEBOX
+            | WS_MAXIMIZEBOX
+            | WS_SYSMENU
+        )
+        styled = SimpleCastApp._integrated_window_style(original)
+
+        self.assertFalse(styled & WS_CAPTION)
+        self.assertFalse(styled & WS_THICKFRAME)
+        self.assertTrue(styled & WS_MINIMIZEBOX)
+        self.assertTrue(styled & WS_MAXIMIZEBOX)
+        self.assertTrue(styled & WS_SYSMENU)
 
 
 if __name__ == "__main__":

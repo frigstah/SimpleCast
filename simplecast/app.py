@@ -251,6 +251,12 @@ SKIN_WINDOW_SIZES = {
 
 COLORS = dict(THEMES["Classic SimpleCast"]["colors"])
 CUSTOM_TITLEBAR_HEIGHT = 32
+CUSTOM_RESIZE_MARGIN = 7
+WS_CAPTION = 0x00C00000
+WS_THICKFRAME = 0x00040000
+WS_MINIMIZEBOX = 0x00020000
+WS_MAXIMIZEBOX = 0x00010000
+WS_SYSMENU = 0x00080000
 FOOTER_TAGLINE = (
     "Software devoloped by BenDover Sporg - Please provide feedback in IM"
 )
@@ -969,16 +975,6 @@ class SimpleCastApp(tk.Tk):
         self.after(1200, self._poll_listener_stats)
         self.after(400, self._apply_launch_automation)
 
-    @staticmethod
-    def _windows_colorref(hex_color: str) -> int:
-        value = hex_color.lstrip("#")
-        red, green, blue = (
-            int(value[0:2], 16),
-            int(value[2:4], 16),
-            int(value[4:6], 16),
-        )
-        return red | (green << 8) | (blue << 16)
-
     def _enable_custom_window_chrome(self) -> bool:
         if platform.system() != "Windows":
             return False
@@ -1009,18 +1005,7 @@ class SimpleCastApp(tk.Tk):
             ]
             set_style.restype = long_pointer
             style = int(get_style(hwnd, -16))
-            ws_caption = 0x00C00000
-            ws_thickframe = 0x00040000
-            ws_minimizebox = 0x00020000
-            ws_maximizebox = 0x00010000
-            ws_sysmenu = 0x00080000
-            style = (
-                (style & ~ws_caption)
-                | ws_thickframe
-                | ws_minimizebox
-                | ws_maximizebox
-                | ws_sysmenu
-            )
+            style = self._integrated_window_style(style)
             set_style(hwnd, -16, long_pointer(style))
             set_window_pos = user32.SetWindowPos
             set_window_pos.argtypes = [
@@ -1043,34 +1028,21 @@ class SimpleCastApp(tk.Tk):
                 0x0001 | 0x0002 | 0x0004 | 0x0020,
             )
             self._custom_window_handle = hwnd
-            self._set_window_border_color()
             return True
         except (AttributeError, OSError, ValueError):
             logging.exception("Could not enable the integrated window frame")
             return False
 
-    def _set_window_border_color(self) -> None:
-        hwnd = getattr(self, "_custom_window_handle", 0)
-        if not hwnd or platform.system() != "Windows":
-            return
-        try:
-            color = ctypes.c_int(self._windows_colorref(COLORS["line"]))
-            set_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
-            set_attribute.argtypes = [
-                ctypes.c_void_p,
-                ctypes.c_uint,
-                ctypes.c_void_p,
-                ctypes.c_uint,
-            ]
-            set_attribute.restype = ctypes.c_long
-            set_attribute(
-                hwnd,
-                34,
-                ctypes.byref(color),
-                ctypes.sizeof(color),
-            )
-        except (AttributeError, OSError, ValueError):
-            logging.debug("Windows border color could not be changed")
+    @staticmethod
+    def _integrated_window_style(style: int) -> int:
+        """Keep taskbar controls without asking DWM to paint a native frame."""
+
+        return (
+            (style & ~(WS_CAPTION | WS_THICKFRAME))
+            | WS_MINIMIZEBOX
+            | WS_MAXIMIZEBOX
+            | WS_SYSMENU
+        )
 
     def _brand_photo(self, size: int) -> ImageTk.PhotoImage:
         cached = self._brand_images.get(size)
@@ -1170,7 +1142,10 @@ class SimpleCastApp(tk.Tk):
             widget.bind("<Double-Button-1>", self._toggle_maximize)
 
     def _titlebar_drag_start(self, event: tk.Event) -> None:
-        if self.wm_state() == "zoomed":
+        if (
+            self.wm_state() == "zoomed"
+            or self._resize_hit_test(event) != ""
+        ):
             return
         self._titlebar_drag_offset = (
             event.x_root - self.winfo_x(),
@@ -1178,7 +1153,10 @@ class SimpleCastApp(tk.Tk):
         )
 
     def _titlebar_drag_move(self, event: tk.Event) -> None:
-        if self.wm_state() == "zoomed":
+        if (
+            self.wm_state() == "zoomed"
+            or getattr(self, "_active_resize", None) is not None
+        ):
             return
         offset = getattr(self, "_titlebar_drag_offset", None)
         if offset is None:
@@ -1220,7 +1198,121 @@ class SimpleCastApp(tk.Tk):
             activebackground=COLORS["error"],
             activeforeground=COLORS["error_text"],
         )
-        self._set_window_border_color()
+
+    def _bind_custom_resize(self) -> None:
+        self._active_resize: tuple[
+            str,
+            int,
+            int,
+            int,
+            int,
+            int,
+            int,
+        ] | None = None
+        self.bind("<Motion>", self._update_resize_cursor, add="+")
+        self.bind("<ButtonPress-1>", self._custom_resize_start, add="+")
+        self.bind("<B1-Motion>", self._custom_resize_move, add="+")
+        self.bind("<ButtonRelease-1>", self._custom_resize_end, add="+")
+
+    def _resize_hit_test(self, event: tk.Event) -> str:
+        if self.wm_state() != "normal":
+            return ""
+        x = event.x_root - self.winfo_rootx()
+        y = event.y_root - self.winfo_rooty()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        margin = CUSTOM_RESIZE_MARGIN
+        west = x <= margin
+        east = x >= width - margin - 1
+        north = y <= margin
+        south = y >= height - margin - 1
+        if north and west:
+            return "nw"
+        if north and east:
+            return "ne"
+        if south and west:
+            return "sw"
+        if south and east:
+            return "se"
+        if north:
+            return "n"
+        if south:
+            return "s"
+        if west:
+            return "w"
+        if east:
+            return "e"
+        return ""
+
+    def _update_resize_cursor(self, event: tk.Event) -> None:
+        if getattr(self, "_active_resize", None) is not None:
+            return
+        direction = self._resize_hit_test(event)
+        cursor = {
+            "n": "sb_v_double_arrow",
+            "s": "sb_v_double_arrow",
+            "e": "sb_h_double_arrow",
+            "w": "sb_h_double_arrow",
+            "nw": "size_nw_se",
+            "se": "size_nw_se",
+            "ne": "size_ne_sw",
+            "sw": "size_ne_sw",
+        }.get(direction, "")
+        try:
+            self.configure(cursor=cursor)
+        except tk.TclError:
+            self.configure(cursor="sizing" if direction else "")
+
+    def _custom_resize_start(self, event: tk.Event) -> None:
+        direction = self._resize_hit_test(event)
+        if not direction:
+            self._active_resize = None
+            return
+        self._active_resize = (
+            direction,
+            event.x_root,
+            event.y_root,
+            self.winfo_x(),
+            self.winfo_y(),
+            self.winfo_width(),
+            self.winfo_height(),
+        )
+
+    def _custom_resize_move(self, event: tk.Event) -> None:
+        resize = getattr(self, "_active_resize", None)
+        if resize is None or self.wm_state() != "normal":
+            return
+        direction, start_x, start_y, x, y, width, height = resize
+        delta_x = event.x_root - start_x
+        delta_y = event.y_root - start_y
+        new_x, new_y = x, y
+        new_width, new_height = width, height
+        if "e" in direction:
+            new_width = width + delta_x
+        if "s" in direction:
+            new_height = height + delta_y
+        if "w" in direction:
+            new_x = x + delta_x
+            new_width = width - delta_x
+        if "n" in direction:
+            new_y = y + delta_y
+            new_height = height - delta_y
+
+        minimum_width, minimum_height = self.minsize()
+        if new_width < minimum_width:
+            if "w" in direction:
+                new_x = x + width - minimum_width
+            new_width = minimum_width
+        if new_height < minimum_height:
+            if "n" in direction:
+                new_y = y + height - minimum_height
+            new_height = minimum_height
+        self.geometry(
+            f"{new_width}x{new_height}+{new_x}+{new_y}"
+        )
+
+    def _custom_resize_end(self, _event: tk.Event) -> None:
+        self._active_resize = None
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self)
@@ -1630,6 +1722,7 @@ class SimpleCastApp(tk.Tk):
         window.pack(fill="both", expand=True)
         if self._custom_chrome_enabled:
             self._build_custom_titlebar(window)
+            self._bind_custom_resize()
         shell_host = ttk.Frame(window)
         shell_host.pack(fill="both", expand=True)
         if self.active_skin in {"Studio Workspace", "Studio Dark"}:
