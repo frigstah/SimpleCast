@@ -27,6 +27,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $soakOutput = Join-Path $env:TEMP "SimpleCast-release-soak.mp3"
+Remove-Item -LiteralPath $soakOutput -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath ([IO.Path]::ChangeExtension($soakOutput, ".json")) `
+  -Force -ErrorAction SilentlyContinue
 python tools\encoder_soak.py `
   --seconds $SoakSeconds `
   --processing "Mixed content" `
