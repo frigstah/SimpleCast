@@ -258,7 +258,7 @@ WS_MINIMIZEBOX = 0x00020000
 WS_MAXIMIZEBOX = 0x00010000
 WS_SYSMENU = 0x00080000
 FOOTER_TAGLINE = (
-    "SimpleCast is devoloped by DoverSoft, please provide feedback if you "
+    "SimpleCast is developed by DoverSoft, please provide feedback if you "
     "encounter issues"
 )
 
