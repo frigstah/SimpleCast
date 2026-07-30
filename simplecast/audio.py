@@ -9,7 +9,7 @@ import time
 import wave
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Protocol
 
 import numpy as np
 import sounddevice as sd
@@ -88,6 +88,35 @@ class AudioDevice:
             self.api_name,
         )
         return (primary, *self.fallbacks)
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureSelection:
+    device: AudioDevice
+    program: object | None = None
+
+    @property
+    def name(self) -> str:
+        program_name = getattr(self.program, "name", "")
+        return (
+            f"{self.device.name} + {program_name}"
+            if program_name
+            else self.device.name
+        )
+
+
+class PcmAudioSource(Protocol):
+    blocks: queue.Queue[bytes]
+    levels: tuple[float, float]
+    peak_level: float
+    channels: int
+    sample_rate: int
+    active_api: str
+    failure: str
+
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...
 
 
 def list_input_devices() -> list[AudioDevice]:
@@ -213,21 +242,60 @@ def _start_input_stream(
 
 
 class AudioEngine:
-    def __init__(self, gain: GainControl | None = None) -> None:
+    def __init__(
+        self,
+        gain: GainControl | None = None,
+        program_gain: GainControl | None = None,
+    ) -> None:
         self._meter_stream: sd.InputStream | None = None
+        self._meter_program_source: PcmAudioSource | None = None
+        self._meter_program_thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._operation_lock = threading.Lock()
         self.gain = gain or GainControl()
+        self.program_gain = program_gain or GainControl()
         self.active_api = ""
 
     def start_meter(
         self,
-        device: AudioDevice,
+        device: object,
         callback: LevelCallback,
         audio_system: str = "Automatic",
     ) -> None:
         with self._operation_lock:
             self._stop_meter_unlocked()
+            if not isinstance(device, AudioDevice):
+                source = create_audio_source(
+                    device,
+                    self.gain,
+                    audio_system,
+                    self.program_gain,
+                )
+                source.start()
+                with self._lock:
+                    self._meter_program_source = source
+                    self.active_api = source.active_api
+
+                def pump_program_meter() -> None:
+                    while self._meter_program_source is source:
+                        try:
+                            source.blocks.get(timeout=0.1)
+                        except queue.Empty:
+                            if source.failure:
+                                return
+                            continue
+                        callback(
+                            *source.levels,
+                            source.peak_level,
+                        )
+
+                thread = threading.Thread(
+                    target=pump_program_meter,
+                    daemon=True,
+                )
+                self._meter_program_thread = thread
+                thread.start()
+                return
 
             def receive(
                 data: np.ndarray,
@@ -262,6 +330,8 @@ class AudioEngine:
         with self._lock:
             stream = self._meter_stream
             self._meter_stream = None
+            program_source = self._meter_program_source
+            self._meter_program_source = None
         if stream is not None:
             try:
                 # abort() is intentionally used instead of stop(). Some Windows
@@ -269,16 +339,75 @@ class AudioEngine:
                 stream.abort()
             finally:
                 stream.close()
+        if program_source is not None:
+            program_source.stop()
+        thread = self._meter_program_thread
+        self._meter_program_thread = None
+        if thread and thread is not threading.current_thread():
+            thread.join(timeout=1)
 
     def record_test(
         self,
-        device: AudioDevice,
+        device: object,
         destination: Path,
         seconds: int = 5,
         progress: Callable[[int], None] | None = None,
         audio_system: str = "Automatic",
     ) -> tuple[float, float]:
         self.stop_meter()
+        if not isinstance(device, AudioDevice):
+            source = create_audio_source(
+                device,
+                self.gain,
+                audio_system,
+                self.program_gain,
+            )
+            source.start()
+            frames: list[np.ndarray] = []
+            started = time.monotonic()
+            last_remaining = seconds
+            try:
+                while time.monotonic() - started < seconds:
+                    try:
+                        block = source.blocks.get(timeout=0.25)
+                    except queue.Empty:
+                        if source.failure:
+                            raise RuntimeError(source.failure)
+                        continue
+                    samples = np.frombuffer(block, dtype="<i2").reshape(
+                        -1,
+                        source.channels,
+                    )
+                    frames.append(samples.astype(np.float32) / 32768.0)
+                    if progress:
+                        remaining = max(
+                            0,
+                            seconds - int(time.monotonic() - started),
+                        )
+                        if remaining != last_remaining:
+                            last_remaining = remaining
+                            progress(remaining)
+            finally:
+                source.stop()
+            data = (
+                np.concatenate(frames, axis=0)
+                if frames
+                else np.zeros((1, source.channels), dtype=np.float32)
+            )
+            peak = np.max(np.abs(data), axis=0)
+            rms = np.sqrt(
+                np.mean(np.square(data.astype(np.float64)), axis=0)
+            )
+            pcm = np.clip(data * 32767, -32768, 32767).astype("<i2")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with wave.open(str(destination), "wb") as output:
+                output.setnchannels(source.channels)
+                output.setsampwidth(2)
+                output.setframerate(source.sample_rate)
+                output.writeframes(pcm.tobytes())
+            self.active_api = source.active_api
+            return float(np.max(rms)), float(np.max(peak))
+
         frames: list[np.ndarray] = []
         started = time.monotonic()
         last_remaining = seconds
@@ -344,6 +473,7 @@ class BroadcastAudioSource:
         self.stream: sd.InputStream | None = None
         self.levels = (0.0, 0.0)
         self.peak_level = 0.0
+        self.failure = ""
         self.channels = device.channels
         self.sample_rate = device.sample_rate
         self.active_api = ""
@@ -391,3 +521,34 @@ class BroadcastAudioSource:
 
 def _display_api(api_name: str) -> str:
     return "Windows WASAPI (shared)" if "WASAPI" in api_name.upper() else api_name
+
+
+def create_audio_source(
+    target: object,
+    gain: GainControl | None = None,
+    audio_system: str = "Automatic",
+    program_gain: GainControl | None = None,
+) -> PcmAudioSource:
+    from .program_audio import (
+        AudioProgram,
+        MixedAudioSource,
+        ProgramAudioSource,
+    )
+
+    if isinstance(target, AudioProgram):
+        return ProgramAudioSource(target, gain)
+    if isinstance(target, CaptureSelection):
+        if target.program is None:
+            return BroadcastAudioSource(target.device, gain, audio_system)
+        if not isinstance(target.program, AudioProgram):
+            raise TypeError("Unsupported program audio source")
+        return MixedAudioSource(
+            target.device,
+            target.program,
+            gain,
+            program_gain,
+            audio_system,
+        )
+    if isinstance(target, AudioDevice):
+        return BroadcastAudioSource(target, gain, audio_system)
+    raise TypeError("Unsupported audio source")

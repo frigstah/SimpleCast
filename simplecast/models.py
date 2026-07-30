@@ -89,6 +89,10 @@ class ServerProfile:
 class AppConfig:
     selected_device: int | None = None
     selected_device_name: str = ""
+    program_audio_enabled: bool = False
+    selected_program_name: str = ""
+    selected_program_path: str = ""
+    selected_program_window: str = ""
     selected_server_id: str = ""
     enabled_server_ids: list[str] = field(default_factory=list)
     favorite_server_ids: list[str] = field(default_factory=list)
@@ -96,6 +100,7 @@ class AppConfig:
     output_sample_rate: int = 44100
     audio_system: str = "Automatic"
     input_volume_percent: int = 100
+    program_volume_percent: int = 100
     processing_preset: str = "Off / Original"
     recording_folder: str = ""
     record_broadcasts: bool = False
@@ -113,6 +118,12 @@ class AppConfig:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "AppConfig":
+        program_audio_enabled = bool(
+            value.get(
+                "program_audio_enabled",
+                value.get("audio_source_mode") == "Program audio",
+            )
+        )
         try:
             output_sample_rate = int(value.get("output_sample_rate", 44100))
         except (TypeError, ValueError):
@@ -211,6 +222,12 @@ class AppConfig:
         return cls(
             selected_device=value.get("selected_device"),
             selected_device_name=value.get("selected_device_name", ""),
+            program_audio_enabled=program_audio_enabled,
+            selected_program_name=str(value.get("selected_program_name", "")),
+            selected_program_path=str(value.get("selected_program_path", "")),
+            selected_program_window=str(
+                value.get("selected_program_window", "")
+            ),
             selected_server_id=selected_server_id,
             enabled_server_ids=enabled_server_ids,
             favorite_server_ids=favorite_server_ids,
@@ -220,6 +237,10 @@ class AppConfig:
             input_volume_percent=max(
                 0,
                 min(200, int(value.get("input_volume_percent", 100))),
+            ),
+            program_volume_percent=max(
+                0,
+                min(200, int(value.get("program_volume_percent", 100))),
             ),
             processing_preset=processing_preset,
             recording_folder=str(value.get("recording_folder", "")),
@@ -243,6 +264,10 @@ class AppConfig:
         return {
             "selected_device": self.selected_device,
             "selected_device_name": self.selected_device_name,
+            "program_audio_enabled": self.program_audio_enabled,
+            "selected_program_name": self.selected_program_name,
+            "selected_program_path": self.selected_program_path,
+            "selected_program_window": self.selected_program_window,
             "selected_server_id": self.selected_server_id,
             "enabled_server_ids": self.enabled_server_ids,
             "favorite_server_ids": self.favorite_server_ids,
@@ -250,6 +275,7 @@ class AppConfig:
             "output_sample_rate": self.output_sample_rate,
             "audio_system": self.audio_system,
             "input_volume_percent": self.input_volume_percent,
+            "program_volume_percent": self.program_volume_percent,
             "processing_preset": self.processing_preset,
             "recording_folder": self.recording_folder,
             "record_broadcasts": self.record_broadcasts,

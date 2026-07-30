@@ -8,7 +8,8 @@ engineering to start broadcasting.
 You need:
 
 - A Windows 10 or Windows 11 computer
-- A microphone, mixer, or other recording device
+- A microphone/mixer and, optionally, a program such as Chrome, Spotify, or
+  KaraFun
 - The server address, port, source password, and stream path or SID supplied by
   your radio host
 
@@ -29,15 +30,21 @@ and compare the file with the published SHA-256 checksum. If Windows offers
 
 On the **Dashboard**:
 
-1. Open the **Device** list.
-2. Choose the microphone, mixer, or line input you want to broadcast.
+1. Choose the microphone or mixer under **Recording device**.
+2. To add music from an application, choose it under
+   **Program audio (optional second source)**. Leave this set to
+   **None — recording device only** when you do not need it.
 3. Leave **Audio system** on **Automatic** at first. SimpleCast normally chooses
-   Windows WASAPI shared mode.
+   Windows WASAPI shared mode for the recording device. Program audio always
+   uses Windows WASAPI process loopback.
 4. Speak or play audio and watch the **L** and **R** meters.
-5. Adjust **Input volume** until the meters move clearly without spending much
-   time in red.
+5. Balance **Recording device volume** and **Program audio volume** until vocals
+   and backing music are both clear without spending much time in red.
 
-If the meters do not move, choose another device and press **Refresh**.
+The VU meter, sound test, recordings, processing, and broadcast all receive the
+same mixed signal. If the meters do not move, press **Refresh** and choose the
+sources again. The selected program must be open and playing audio. Program
+audio requires Windows build 20348 or newer; Windows 11 is recommended.
 
 ## 3. Test your sound
 
@@ -211,6 +218,8 @@ offers newer beta releases.
 ### No audio on the meters
 
 - Press **Refresh** and choose the device again.
+- If program audio is enabled, keep that program open and playing, then select
+  it again after pressing **Refresh**.
 - Leave the audio system on **Automatic**.
 - Close other software that may have exclusive control of the device.
 - Reconnect a USB mixer or microphone, then restart SimpleCast.
@@ -224,8 +233,9 @@ offers newer beta releases.
 
 ### SimpleCast reports clipping
 
-Lower **Input volume** or reduce the level on the mixer. Processing can control
-normal peaks, but it cannot repair audio that was already badly clipped.
+Lower **Recording device volume**, **Program audio volume**, or the source level.
+Processing can control normal peaks, but it cannot repair audio that was already
+badly clipped.
 
 ### You need help
 

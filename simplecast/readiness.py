@@ -11,6 +11,7 @@ from .audio import AudioDevice
 from .encoder import get_ffmpeg_exe
 from .models import AppConfig
 from .processing import PROCESSING_PRESETS
+from .program_audio import AudioProgram, process_loopback_supported
 from .streaming import QUALITY_PRESETS
 
 
@@ -112,6 +113,7 @@ def run_readiness_checks(
     passwords: dict[str, str],
     config_root: Path,
     recording_folder: Path,
+    programs: list[AudioProgram] | None = None,
 ) -> list[ReadinessCheck]:
     checks: list[ReadinessCheck] = []
     windows = platform.system() == "Windows"
@@ -133,6 +135,31 @@ def run_readiness_checks(
             ),
         )
     )
+    if config.program_audio_enabled:
+        available_programs = programs or []
+        selected_program_available = any(
+            item.executable.casefold()
+            == config.selected_program_path.casefold()
+            for item in available_programs
+        )
+        program_ready = (
+            process_loopback_supported()
+            and bool(config.selected_program_path)
+            and selected_program_available
+        )
+        checks.append(
+            ReadinessCheck(
+                "Program audio",
+                "Pass" if program_ready else "Fail",
+                (
+                    f"{config.selected_program_name} is available through "
+                    "Windows WASAPI process loopback."
+                    if program_ready
+                    else "Open the saved program and refresh the Source list. "
+                    "Program audio requires Windows build 20348 or newer."
+                ),
+            )
+        )
     ffmpeg_ready, ffmpeg_detail = _ffmpeg_capabilities()
     checks.append(
         ReadinessCheck(

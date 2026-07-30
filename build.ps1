@@ -1,6 +1,13 @@
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
+& (Join-Path $projectRoot "build-native.ps1")
+if ($LASTEXITCODE -ne 0) {
+  throw "The native audio component build failed with exit code $LASTEXITCODE."
+}
+$processLoopback = Join-Path $projectRoot (
+  "native\bin\simplecast-process-loopback.exe"
+)
 $vendorEncoder = Join-Path $projectRoot "vendor\ffmpeg\ffmpeg.exe"
 $vendorLicense = Join-Path $projectRoot "vendor\ffmpeg\LICENSE.txt"
 if (
@@ -19,6 +26,7 @@ python -m PyInstaller `
   --add-data "$projectRoot\assets\simplecast.ico;assets" `
   --add-data "$projectRoot\assets\simplecast-icon.png;assets" `
   --add-binary "$vendorEncoder;vendor\ffmpeg" `
+  --add-binary "$processLoopback;native" `
   --add-data "$vendorLicense;vendor\ffmpeg" `
   --collect-all sounddevice `
   --collect-all keyring `
@@ -40,7 +48,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "docs\ROADMAP.md") -Destination $
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\CERTIFICATION.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\RELEASE_CHECKLIST.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\PRIVACY.md") -Destination $distRoot
-Copy-Item -LiteralPath (Join-Path $projectRoot "docs\BUILD_PROVENANCE_0.9.0-beta.12.md") -Destination $distRoot
+Copy-Item -LiteralPath (Join-Path $projectRoot "docs\BUILD_PROVENANCE_0.9.0-beta.13.md") -Destination $distRoot
 
 $applicationHash = (Get-FileHash `
   -LiteralPath (Join-Path $distRoot "SimpleCast.exe") `
@@ -50,6 +58,18 @@ $ffmpegBinary = Get-Item -LiteralPath (
 )
 $ffmpegHash = if ($ffmpegBinary) {
   (Get-FileHash -LiteralPath $ffmpegBinary.FullName -Algorithm SHA256).Hash
+} else {
+  "NOT FOUND"
+}
+$processLoopbackBinary = Get-Item -LiteralPath (
+  Join-Path $distRoot "_internal\native\simplecast-process-loopback.exe"
+)
+$processLoopbackHash = if ($processLoopbackBinary) {
+  (
+    Get-FileHash `
+      -LiteralPath $processLoopbackBinary.FullName `
+      -Algorithm SHA256
+  ).Hash
 } else {
   "NOT FOUND"
 }
@@ -70,6 +90,8 @@ $sourceState = if (git -C $projectRoot status --porcelain 2>$null) {
   "SimpleCast.exe SHA256: $applicationHash"
   "FFmpeg binary: $($ffmpegBinary.Name)"
   "FFmpeg SHA256: $ffmpegHash"
+  "Process-loopback binary: $($processLoopbackBinary.Name)"
+  "Process-loopback SHA256: $processLoopbackHash"
 ) | Set-Content `
   -LiteralPath (Join-Path $distRoot "COMPONENT_HASHES.txt") `
   -Encoding UTF8

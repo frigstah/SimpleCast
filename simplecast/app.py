@@ -21,6 +21,7 @@ from .audio import (
     AUDIO_SYSTEMS,
     AudioDevice,
     AudioEngine,
+    CaptureSelection,
     GainControl,
     list_input_devices,
 )
@@ -39,6 +40,13 @@ from .models import AppConfig, ServerProfile
 from .processing import (
     PROCESSING_PRESETS,
     process_test_file,
+)
+from .program_audio import (
+    AudioProgram,
+    list_audio_programs,
+    process_loopback_compatibility_message,
+    process_loopback_supported,
+    resolve_audio_program,
 )
 from .recording import (
     RECORDING_BITRATE,
@@ -267,6 +275,7 @@ SAMPLE_RATES = {
     "44.1 kHz": 44100,
     "48 kHz": 48000,
 }
+PROGRAM_AUDIO_OFF = "None — recording device only"
 
 STARTUP_DELAYS = {
     "5 seconds": 5,
@@ -894,9 +903,14 @@ class SimpleCastApp(tk.Tk):
         self.minsize(minimum_width, minimum_height)
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.gain = GainControl(self.config.input_volume_percent)
-        self.audio = AudioEngine(self.gain)
+        self.program_gain = GainControl(
+            self.config.program_volume_percent
+        )
+        self.audio = AudioEngine(self.gain, self.program_gain)
         self.devices: list[AudioDevice] = []
+        self.programs: list[AudioProgram] = []
         self.current_device: AudioDevice | None = None
+        self.current_program: AudioProgram | None = None
         self._meter_levels = (0.0, 0.0)
         self._meter_peak = 0.0
         self.last_test_path = Path(tempfile.gettempdir()) / "simplecast_sound_test.wav"
@@ -914,12 +928,14 @@ class SimpleCastApp(tk.Tk):
             self.gain,
             self._resolve_device,
             self._on_broadcast_recording,
+            self.program_gain,
         )
         self.recording = RecordingEngine(
             self._on_recording_state,
             self._on_level,
             self.gain,
             self._resolve_device,
+            self.program_gain,
         )
         self.metadata_watcher = MetadataFileWatcher(
             self._on_metadata_file_title,
@@ -943,6 +959,7 @@ class SimpleCastApp(tk.Tk):
             lambda: self.stream.active,
         )
         self._volume_save_job: str | None = None
+        self._program_volume_save_job: str | None = None
         self._closing = False
         self._restart_requested = False
         self._launched_by_windows = "--startup" in sys.argv[1:]
@@ -2142,7 +2159,11 @@ class SimpleCastApp(tk.Tk):
         meters = ttk.Frame(audio_body, style="Card.TFrame")
         meters.grid(row=0, column=1, sticky="ns")
 
-        ttk.Label(controls, text="Device", style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(
+            controls,
+            text="Recording device",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w")
         self.device_var = tk.StringVar()
         self.device_combo = ttk.Combobox(
             controls,
@@ -2151,6 +2172,23 @@ class SimpleCastApp(tk.Tk):
         )
         self.device_combo.pack(fill="x", pady=(3, 6))
         self.device_combo.bind("<<ComboboxSelected>>", self._device_selected)
+
+        ttk.Label(
+            controls,
+            text="Program audio (optional second source)",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w")
+        self.program_var = tk.StringVar(value=PROGRAM_AUDIO_OFF)
+        self.program_combo = ttk.Combobox(
+            controls,
+            textvariable=self.program_var,
+            state="readonly",
+        )
+        self.program_combo.pack(fill="x", pady=(3, 6))
+        self.program_combo.bind(
+            "<<ComboboxSelected>>",
+            self._program_selected,
+        )
 
         audio_system_row = ttk.Frame(controls, style="Card.TFrame")
         audio_system_row.pack(fill="x", pady=(0, 6))
@@ -2179,7 +2217,11 @@ class SimpleCastApp(tk.Tk):
         )
         self.audio_api_status.pack(anchor="w", pady=(0, 6))
 
-        ttk.Label(controls, text="Input volume", style="CardMuted.TLabel").pack(anchor="w")
+        ttk.Label(
+            controls,
+            text="Recording device volume",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w")
         volume_row = ttk.Frame(controls, style="Card.TFrame")
         volume_row.pack(fill="x", pady=(3, 6))
         self.volume_var = tk.DoubleVar(value=self.config.input_volume_percent)
@@ -2204,6 +2246,7 @@ class SimpleCastApp(tk.Tk):
             text="Reset",
             command=self._reset_volume,
         ).pack(side="left", padx=(8, 0))
+        self._build_program_volume(controls)
 
         ttk.Label(controls, text="Processing", style="CardMuted.TLabel").pack(anchor="w")
         self.processing_var = tk.StringVar(value=self.config.processing_preset)
@@ -2473,6 +2516,23 @@ class SimpleCastApp(tk.Tk):
 
         ttk.Label(
             panel,
+            text="Program audio (optional second source)",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", pady=(9, 3))
+        self.program_var = tk.StringVar(value=PROGRAM_AUDIO_OFF)
+        self.program_combo = ttk.Combobox(
+            panel,
+            textvariable=self.program_var,
+            state="readonly",
+        )
+        self.program_combo.pack(fill="x")
+        self.program_combo.bind(
+            "<<ComboboxSelected>>",
+            self._program_selected,
+        )
+
+        ttk.Label(
+            panel,
             text="Audio system",
             style="CardMuted.TLabel",
         ).pack(anchor="w", pady=(9, 3))
@@ -2568,7 +2628,7 @@ class SimpleCastApp(tk.Tk):
     ) -> None:
         ttk.Label(
             parent,
-            text="Input volume",
+            text="Recording device volume",
             style="CardMuted.TLabel",
         ).pack(anchor="w")
         volume = ttk.Frame(parent, style="Card.TFrame")
@@ -2595,6 +2655,7 @@ class SimpleCastApp(tk.Tk):
             text="Reset",
             command=self._reset_volume,
         ).pack(side="left", padx=(8, 0))
+        self._build_program_volume(parent)
 
         ttk.Label(
             parent,
@@ -2620,6 +2681,44 @@ class SimpleCastApp(tk.Tk):
             wraplength=wraplength,
         )
         self.processing_detail.pack(anchor="w")
+
+    def _build_program_volume(self, parent: ttk.Frame) -> None:
+        ttk.Label(
+            parent,
+            text="Program audio volume",
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
+        row = ttk.Frame(parent, style="Card.TFrame")
+        row.pack(fill="x", pady=(3, 8))
+        self.program_volume_var = tk.DoubleVar(
+            value=self.config.program_volume_percent
+        )
+        self.program_volume_slider = ttk.Scale(
+            row,
+            from_=0,
+            to=200,
+            variable=self.program_volume_var,
+            command=self._program_volume_changed,
+        )
+        self.program_volume_slider.pack(
+            side="left",
+            fill="x",
+            expand=True,
+        )
+        self.program_volume_label = ttk.Label(
+            row,
+            text=f"{self.config.program_volume_percent}%",
+            width=6,
+            anchor="e",
+            style="Card.TLabel",
+        )
+        self.program_volume_label.pack(side="left", padx=(8, 0))
+        self.program_volume_reset_button = ttk.Button(
+            row,
+            text="Reset",
+            command=self._reset_program_volume,
+        )
+        self.program_volume_reset_button.pack(side="left", padx=(8, 0))
 
     def _build_alt_signal_panel(
         self,
@@ -3428,12 +3527,25 @@ class SimpleCastApp(tk.Tk):
             logging.exception("Could not enumerate audio devices")
             self.devices = []
             self.sound_hint.configure(text=f"Audio devices unavailable: {error}")
-        labels = [device.label for device in self.devices]
-        self.device_combo.configure(values=labels)
-        selected: AudioDevice | None = None
+        try:
+            self.programs = list_audio_programs()
+        except Exception as error:
+            logging.exception("Could not enumerate running programs")
+            self.programs = []
+            if self.config.program_audio_enabled:
+                self.sound_hint.configure(
+                    text=f"Running programs unavailable: {error}"
+                )
+
+        device_labels = [device.label for device in self.devices]
+        self._device_label_map = {
+            device.label: device for device in self.devices
+        }
+        self.device_combo.configure(values=device_labels)
+        selected_device: AudioDevice | None = None
         has_saved_name = bool(self.config.selected_device_name)
         if has_saved_name:
-            selected = next(
+            selected_device = next(
                 (
                     item
                     for item in self.devices
@@ -3442,11 +3554,11 @@ class SimpleCastApp(tk.Tk):
                 None,
             )
         if (
-            selected is None
+            selected_device is None
             and not has_saved_name
             and self.config.selected_device is not None
         ):
-            selected = next(
+            selected_device = next(
                 (
                     item
                     for item in self.devices
@@ -3454,39 +3566,138 @@ class SimpleCastApp(tk.Tk):
                 ),
                 None,
             )
-        if selected is None and self.devices and not has_saved_name:
-            selected = self.devices[0]
-        self.current_device = selected
-        if selected:
-            self.device_var.set(selected.label)
-            self.config.selected_device = selected.index
-            self.config.selected_device_name = selected.name
-            self.save_config()
-            # WASAPI may invoke its first callback during InputStream.start().
-            # Delay initial capture until Tk's event loop is active so that
-            # callback can safely schedule meter updates on the UI thread.
-            self.after(100, self._start_meter)
+        if selected_device is None and self.devices and not has_saved_name:
+            selected_device = self.devices[0]
+        self.current_device = selected_device
+        if selected_device:
+            self.device_var.set(selected_device.label)
+            self.config.selected_device = selected_device.index
+            self.config.selected_device_name = selected_device.name
+        elif has_saved_name:
+            self.device_var.set(
+                f"{self.config.selected_device_name} — unavailable"
+            )
+            self.audio_api_status.configure(
+                text="Connect the saved audio device, then refresh"
+            )
         else:
-            if has_saved_name:
-                self.device_var.set(
-                    f"{self.config.selected_device_name} — unavailable"
+            self.device_var.set("No recording devices found")
+            self.audio_api_status.configure(text="No audio input is available")
+
+        self._program_label_map: dict[str, AudioProgram] = {}
+        program_labels = [PROGRAM_AUDIO_OFF]
+        for program in self.programs:
+            label = program.label
+            if label in self._program_label_map:
+                label = f"{label} · PID {program.pid}"
+            self._program_label_map[label] = program
+            program_labels.append(label)
+        self.program_combo.configure(values=program_labels)
+
+        selected_program: AudioProgram | None = None
+        if self.config.program_audio_enabled:
+            selected_program = next(
+                (
+                    item
+                    for item in self.programs
+                    if (
+                        self.config.selected_program_path
+                        and item.executable.casefold()
+                        == self.config.selected_program_path.casefold()
+                        and (
+                            not self.config.selected_program_window
+                            or item.window_title
+                            == self.config.selected_program_window
+                        )
+                    )
+                ),
+                None,
+            )
+            if selected_program is None and self.config.selected_program_path:
+                selected_program = next(
+                    (
+                        item
+                        for item in self.programs
+                        if item.executable.casefold()
+                        == self.config.selected_program_path.casefold()
+                    ),
+                    None,
                 )
-                self.audio_api_status.configure(
-                    text="Connect the saved audio device, then refresh"
+            if (
+                selected_program is None
+                and not self.config.selected_program_path
+                and self.programs
+            ):
+                selected_program = self.programs[0]
+
+        self.current_program = selected_program
+        if selected_program is not None:
+            selected_label = next(
+                (
+                    label
+                    for label, item in self._program_label_map.items()
+                    if item == selected_program
+                ),
+                selected_program.label,
+            )
+            self.program_var.set(selected_label)
+            self.config.selected_program_name = selected_program.name
+            self.config.selected_program_path = selected_program.executable
+            self.config.selected_program_window = selected_program.window_title
+        elif self.config.program_audio_enabled:
+            missing_name = self.config.selected_program_name or "Saved program"
+            self.program_var.set(f"{missing_name} — unavailable")
+            self.audio_api_status.configure(
+                text="Open the saved program, then press Refresh"
+            )
+        else:
+            self.program_var.set(PROGRAM_AUDIO_OFF)
+
+        self._update_program_volume_controls()
+        self.save_config()
+        if (
+            selected_device is not None
+            and (
+                not self.config.program_audio_enabled
+                or (
+                    selected_program is not None
+                    and process_loopback_supported()
                 )
-            else:
-                self.device_var.set("No recording devices found")
-                self.audio_api_status.configure(text="No audio input is available")
+            )
+        ):
+            # WASAPI may invoke its first callback during InputStream.start().
+            # Delay initial capture until Tk's event loop is active.
+            self.after(100, self._start_meter)
 
     def _device_selected(self, _event: object = None) -> None:
         label = self.device_var.get()
-        selected = next((item for item in self.devices if item.label == label), None)
+        selected = self._device_label_map.get(label)
         if selected:
             self.current_device = selected
             self.config.selected_device = selected.index
             self.config.selected_device_name = selected.name
             self.save_config()
             self._start_meter()
+
+    def _program_selected(self, _event: object = None) -> None:
+        selected = self._program_label_map.get(self.program_var.get())
+        if selected is None:
+            self.config.program_audio_enabled = False
+            self.current_program = None
+            self.program_var.set(PROGRAM_AUDIO_OFF)
+        else:
+            self.config.program_audio_enabled = True
+            self.current_program = selected
+            self.config.selected_program_name = selected.name
+            self.config.selected_program_path = selected.executable
+            self.config.selected_program_window = selected.window_title
+        self._test_ready = False
+        self.play_original_button.configure(state="disabled")
+        self.play_processed_button.configure(state="disabled")
+        self.save_config()
+        self._update_program_volume_controls()
+        self.audio_api_status.configure(text="Opening the mixed audio sources…")
+        self._start_meter()
 
     def _audio_system_selected(self, _event: object = None) -> None:
         self.config.audio_system = self.audio_system_var.get()
@@ -3495,7 +3706,21 @@ class SimpleCastApp(tk.Tk):
         self._start_meter()
 
     @staticmethod
-    def _resolve_device(device: AudioDevice) -> AudioDevice:
+    def _resolve_device(
+        device: AudioDevice | AudioProgram | CaptureSelection,
+    ) -> AudioDevice | AudioProgram | CaptureSelection:
+        if isinstance(device, CaptureSelection):
+            resolved_device = SimpleCastApp._resolve_device(device.device)
+            if not isinstance(resolved_device, AudioDevice):
+                raise TypeError("The primary audio source must be a device.")
+            resolved_program = (
+                resolve_audio_program(device.program)
+                if isinstance(device.program, AudioProgram)
+                else None
+            )
+            return CaptureSelection(resolved_device, resolved_program)
+        if isinstance(device, AudioProgram):
+            return resolve_audio_program(device)
         matches = [
             item
             for item in list_input_devices()
@@ -3507,6 +3732,15 @@ class SimpleCastApp(tk.Tk):
                 "SimpleCast will keep trying."
             )
         return matches[0]
+
+    def _capture_selection(self) -> CaptureSelection | None:
+        if self.current_device is None:
+            return None
+        if self.config.program_audio_enabled:
+            if self.current_program is None:
+                return None
+            return CaptureSelection(self.current_device, self.current_program)
+        return CaptureSelection(self.current_device)
 
     def _quality_selected(self, _event: object = None) -> None:
         self.config.quality = self.quality_var.get()
@@ -3748,10 +3982,22 @@ class SimpleCastApp(tk.Tk):
         ):
             self.startup_status_label.configure(
                 text=(
-                    f"Waiting for audio device: {desired_name}"
+                    f"Waiting for audio source: {desired_name}"
                     if desired_name
-                    else "Waiting for an audio input device…"
+                    else "Waiting for an audio source…"
                 ),
+                foreground=COLORS["warning"],
+            )
+            self.refresh_devices()
+            self._auto_start_job = self.after(
+                2000,
+                self._attempt_automatic_broadcast,
+            )
+            return
+        if self.config.program_audio_enabled and self.current_program is None:
+            program_name = self.config.selected_program_name or "saved program"
+            self.startup_status_label.configure(
+                text=f"Waiting for program audio: {program_name}",
                 foreground=COLORS["warning"],
             )
             self.refresh_devices()
@@ -4026,19 +4272,26 @@ class SimpleCastApp(tk.Tk):
                 parent=self,
             )
             return
-        if not self.current_device:
+        selection = self._capture_selection()
+        if selection is None:
             messagebox.showinfo(
                 "Choose your sound",
-                "Select a recording device first.",
+                (
+                    "Select a recording device first."
+                    if self.current_device is None
+                    else "Open the selected program and press Refresh, or "
+                    "choose recording device only."
+                ),
                 parent=self,
             )
             return
-        device = self.current_device
+        device = selection
         output_sample_rate = SAMPLE_RATES.get(self.sample_rate_var.get(), 44100)
         audio_system = self.audio_system_var.get()
         self.recording_button.configure(state="disabled", text="PREPARING…")
         self.broadcast_button.configure(state="disabled")
         self.device_combo.configure(state="disabled")
+        self.program_combo.configure(state="disabled")
         self.sound_button.configure(state="disabled")
         self.play_original_button.configure(state="disabled")
         self.play_processed_button.configure(state="disabled")
@@ -4123,6 +4376,7 @@ class SimpleCastApp(tk.Tk):
             )
             self.broadcast_button.configure(state="disabled")
             self.device_combo.configure(state="disabled")
+            self.program_combo.configure(state="disabled")
             self.audio_system_combo.configure(state="disabled")
             self.sample_rate_combo.configure(state="disabled")
             self.processing_combo.configure(state="disabled")
@@ -4136,6 +4390,7 @@ class SimpleCastApp(tk.Tk):
             )
             self.broadcast_button.configure(state="normal")
             self.device_combo.configure(state="readonly")
+            self.program_combo.configure(state="readonly")
             self.audio_system_combo.configure(state="readonly")
             self.sample_rate_combo.configure(state="readonly")
             self.processing_combo.configure(state="readonly")
@@ -4188,15 +4443,47 @@ class SimpleCastApp(tk.Tk):
         self.volume_var.set(100)
         self._volume_changed("100")
 
+    def _program_volume_changed(self, value: str) -> None:
+        percent = int(round(float(value)))
+        self.config.program_volume_percent = percent
+        self.program_gain.set_percent(percent)
+        self.program_volume_label.configure(text=f"{percent}%")
+        if self._program_volume_save_job is not None:
+            self.after_cancel(self._program_volume_save_job)
+        self._program_volume_save_job = self.after(
+            300,
+            self._save_program_volume,
+        )
+
+    def _save_program_volume(self) -> None:
+        self._program_volume_save_job = None
+        self.save_config()
+
+    def _reset_program_volume(self) -> None:
+        self.program_volume_var.set(100)
+        self._program_volume_changed("100")
+
+    def _update_program_volume_controls(self) -> None:
+        state = "normal" if self.config.program_audio_enabled else "disabled"
+        self.program_volume_slider.configure(state=state)
+        self.program_volume_reset_button.configure(state=state)
+
     def _start_meter(self) -> None:
-        if not self.current_device or self.stream.active:
+        if self.stream.active or self.recording.active:
             return
-        device = self.current_device
+        selection = self._capture_selection()
+        if selection is None:
+            threading.Thread(target=self.audio.stop_meter, daemon=True).start()
+            if self.current_device and self.config.program_audio_enabled:
+                self.audio_api_status.configure(
+                    text="Program audio unavailable — open it and press Refresh"
+                )
+            return
 
         def worker() -> None:
             try:
                 self.audio.start_meter(
-                    device,
+                    selection,
                     self._capture_meter_level,
                     self.config.audio_system,
                 )
@@ -4301,10 +4588,16 @@ class SimpleCastApp(tk.Tk):
             self.after(50, self._poll_meter_levels)
 
     def test_sound(self) -> None:
-        if not self.current_device:
+        selection = self._capture_selection()
+        if selection is None:
             messagebox.showinfo(
                 "Choose an input",
-                "Connect or choose a recording device first.",
+                (
+                    "Connect or choose a recording device first."
+                    if self.current_device is None
+                    else "Open the selected program and press Refresh, or "
+                    "choose recording device only."
+                ),
                 parent=self,
             )
             return
@@ -4325,7 +4618,7 @@ class SimpleCastApp(tk.Tk):
         def worker() -> None:
             try:
                 rms, peak = self.audio.record_test(
-                    self.current_device,
+                    selection,
                     self.last_test_path,
                     progress=progress,
                     audio_system=self.config.audio_system,
@@ -4779,10 +5072,16 @@ class SimpleCastApp(tk.Tk):
             )
             return
         servers = self.config.enabled_servers()
-        if not self.current_device:
+        selection = self._capture_selection()
+        if selection is None:
             messagebox.showinfo(
                 "Choose your sound",
-                "Select a recording device before broadcasting.",
+                (
+                    "Select a recording device before broadcasting."
+                    if self.current_device is None
+                    else "Open the selected program and press Refresh, or "
+                    "choose recording device only."
+                ),
                 parent=self,
             )
             return
@@ -4813,13 +5112,14 @@ class SimpleCastApp(tk.Tk):
             StreamDestination(server, passwords[server.id])
             for server in servers
         ]
-        device = self.current_device
+        device = selection
         quality = self.quality_var.get()
         output_sample_rate = SAMPLE_RATES.get(self.sample_rate_var.get(), 44100)
         audio_system = self.audio_system_var.get()
         record_broadcast = self.record_broadcasts_var.get()
         self.broadcast_button.configure(state="disabled", text="PREPARING AUDIO…")
         self.device_combo.configure(state="disabled")
+        self.program_combo.configure(state="disabled")
         self.sound_button.configure(state="disabled")
         self.play_original_button.configure(state="disabled")
         self.play_processed_button.configure(state="disabled")
@@ -4862,8 +5162,8 @@ class SimpleCastApp(tk.Tk):
                     lambda: (
                         messagebox.showerror(
                             "Could not start the audio input",
-                            f"{error_message}\n\nTry unplugging and reconnecting the audio "
-                            "device, then select it again.",
+                            f"{error_message}\n\nRefresh the Source list and "
+                            "select the input again.",
                             parent=self,
                         ),
                         self._apply_stream_state(
@@ -5125,6 +5425,7 @@ class SimpleCastApp(tk.Tk):
                 self.play_original_button.configure(state="normal")
                 self.play_processed_button.configure(state="normal")
             self.device_combo.configure(state="readonly")
+            self.program_combo.configure(state="readonly")
             self.audio_system_combo.configure(state="readonly")
             self.quality_combo.configure(state="readonly")
             self.sample_rate_combo.configure(state="readonly")
@@ -5148,6 +5449,7 @@ class SimpleCastApp(tk.Tk):
             self.play_original_button.configure(state="disabled")
             self.play_processed_button.configure(state="disabled")
             self.device_combo.configure(state="disabled")
+            self.program_combo.configure(state="disabled")
             self.audio_system_combo.configure(state="disabled")
             self.quality_combo.configure(state="disabled")
             self.sample_rate_combo.configure(state="disabled")
@@ -5231,12 +5533,20 @@ class SimpleCastApp(tk.Tk):
             f"Windows: {platform.platform()}",
             f"Python: {platform.python_version()}",
             f"State: {self.state.value}",
-            f"Audio device: {self.current_device.name if self.current_device else 'None'}",
+            (
+                "Recording device: "
+                f"{self.current_device.name if self.current_device else 'None'}"
+            ),
+            (
+                "Program audio: "
+                f"{self.current_program.name if self.current_program else 'Off'}"
+            ),
             f"Audio system: {self.config.audio_system}",
             f"Quality: {self.config.quality}",
             f"Sample rate: {self.config.output_sample_rate} Hz",
             f"Processing: {self.config.processing_preset}",
-            f"Input volume: {self.config.input_volume_percent}%",
+            f"Recording device volume: {self.config.input_volume_percent}%",
+            f"Program audio volume: {self.config.program_volume_percent}%",
             f"Record broadcasts: {self.config.record_broadcasts}",
             f"Recording folder: {self._recording_folder()}",
             f"Start with Windows: {self.config.start_with_windows}",
@@ -5359,6 +5669,7 @@ class SimpleCastApp(tk.Tk):
                     passwords,
                     self.store.root,
                     self._recording_folder(),
+                    list(self.programs),
                 )
                 self.after(0, lambda: show_results(checks))
             except Exception as error:

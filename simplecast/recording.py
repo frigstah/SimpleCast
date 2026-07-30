@@ -10,7 +10,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable
 
-from .audio import AudioDevice, BroadcastAudioSource, GainControl
+from .audio import GainControl, PcmAudioSource, create_audio_source
 from .encoder import get_ffmpeg_exe
 from .processing import DEFAULT_PROCESSING_PRESET, filter_arguments
 
@@ -160,15 +160,17 @@ class RecordingEngine:
         state_callback: Callable[[RecordingState, str, Path | None], None],
         level_callback: Callable[[float, float], None],
         gain: GainControl | None = None,
-        device_resolver: Callable[[AudioDevice], AudioDevice] | None = None,
+        device_resolver: Callable[[object], object] | None = None,
+        program_gain: GainControl | None = None,
     ) -> None:
         self.state_callback = state_callback
         self.level_callback = level_callback
         self.gain = gain or GainControl()
         self.device_resolver = device_resolver or (lambda device: device)
+        self.program_gain = program_gain or GainControl()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._source: BroadcastAudioSource | None = None
+        self._source: PcmAudioSource | None = None
         self._writer: Mp3FileWriter | None = None
         self.path: Path | None = None
         self.started_at: float | None = None
@@ -186,7 +188,7 @@ class RecordingEngine:
 
     def start(
         self,
-        device: AudioDevice,
+        device: object,
         destination: Path,
         output_sample_rate: int,
         audio_system: str,
@@ -220,21 +222,22 @@ class RecordingEngine:
 
     def _run(
         self,
-        device: AudioDevice,
+        device: object,
         destination: Path,
         output_sample_rate: int,
         audio_system: str,
         processing_preset: str,
     ) -> None:
-        source: BroadcastAudioSource | None = None
+        source: PcmAudioSource | None = None
         writer: Mp3FileWriter | None = None
         error: Exception | None = None
         try:
             resolved_device = self.device_resolver(device)
-            source = BroadcastAudioSource(
+            source = create_audio_source(
                 resolved_device,
                 self.gain,
                 audio_system,
+                self.program_gain,
             )
             self._source = source
             source.start()
@@ -256,6 +259,8 @@ class RecordingEngine:
                 try:
                     block = source.blocks.get(timeout=0.25)
                 except queue.Empty:
+                    if source.failure:
+                        raise RuntimeError(source.failure)
                     continue
                 writer.write(block)
         except Exception as caught:

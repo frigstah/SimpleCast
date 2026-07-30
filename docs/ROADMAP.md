@@ -11,7 +11,7 @@
 
 ## 0.2 — Pilot hardening
 
-- Windows speaker-loopback capture
+- Windows per-process WASAPI loopback capture (completed after the first beta)
 - Device hot-plug recovery
 - 72-hour soak tests
 - Windows sleep prevention while live
@@ -86,6 +86,8 @@
 
 ## 0.9 — Current Phase 9: public-beta readiness
 
+- Simultaneous microphone/mixer plus per-program WASAPI audio mixing
+- Independent live volume controls for the recording device and program audio
 - In-app beta-readiness check with clear pass, warning, and failure results
 - Verification of audio devices, writable folders, station credentials, and format
 - Bundled FFmpeg MP3 encoder and safety-limiter capability check
@@ -106,12 +108,12 @@
 
 ## Next product work
 
+- Optional all-system-output capture for older Windows systems
 - AAC and Opus after codec review
 
 ## Later
 
 - Native SHOUTcast Ultravox 2.1 support if licensing and interoperability allow it
-- Microphone plus computer-audio mixing
 - Automation metadata over TCP/UDP
 - Failover server and remote alerts
 - VST3 and detailed broadcast processing

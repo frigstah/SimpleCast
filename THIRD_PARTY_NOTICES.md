@@ -42,3 +42,8 @@ Exact source and build materials accompany the release as
 Licenses for Python, Tcl/Tk, NumPy, sounddevice/PortAudio, keyring, and other
 packaged dependencies are retained in the corresponding folders under
 `_internal`.
+
+The native process-loopback implementation follows the documented Windows
+WASAPI Application Loopback pattern demonstrated by Microsoft's MIT-licensed
+Windows classic samples:
+https://github.com/microsoft/Windows-classic-samples/tree/main/Samples/ApplicationLoopback

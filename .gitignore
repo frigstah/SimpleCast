@@ -6,9 +6,12 @@ dist/
 *.spec
 *.zip
 *.exe
+*.obj
 installer/output/
 SimpleCast-Windows-x64*/
 ui-smoke.png
+ui-process-source.png
+ui-mixed-source.png
 simplecast-modern-ui*.png
 ffmpeg-provider-*/
 ffmpeg-btbn-*/

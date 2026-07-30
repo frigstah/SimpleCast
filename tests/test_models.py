@@ -57,6 +57,32 @@ class ServerProfileTests(unittest.TestCase):
             "Automatic",
         )
 
+    def test_program_audio_source_settings_are_saved_and_migrated(self) -> None:
+        config = AppConfig.from_dict(
+            {
+                "audio_source_mode": "Program audio",
+                "selected_program_name": "Spotify",
+                "selected_program_path": r"C:\Apps\Spotify.exe",
+                "selected_program_window": "Spotify Premium",
+                "program_volume_percent": 125,
+            }
+        )
+        self.assertTrue(config.program_audio_enabled)
+        self.assertEqual(config.selected_program_name, "Spotify")
+        self.assertEqual(config.selected_program_path, r"C:\Apps\Spotify.exe")
+        self.assertEqual(config.selected_program_window, "Spotify Premium")
+        self.assertEqual(config.program_volume_percent, 125)
+        self.assertFalse(
+            AppConfig.from_dict(
+                {"audio_source_mode": "unsupported"}
+            ).program_audio_enabled
+        )
+        self.assertTrue(
+            AppConfig.from_dict(
+                {"program_audio_enabled": True}
+            ).program_audio_enabled
+        )
+
     def test_invalid_startup_delay_uses_safe_default(self) -> None:
         self.assertEqual(
             AppConfig.from_dict({"startup_delay_seconds": 0}).startup_delay_seconds,

@@ -14,8 +14,10 @@ New to internet radio? Follow the [SimpleCast quick-start guide](QUICK_START.md)
 
 Requirements:
 
-- Windows 10 or 11
+- Windows 10 or 11 (program-specific audio requires build 20348 or newer;
+  Windows 11 is recommended)
 - Python 3.11+
+- Visual C++ x64 Build Tools and the Windows SDK
 - `sounddevice`, `numpy`, `keyring`, and the pinned FFmpeg build
 
 ```powershell
@@ -38,6 +40,10 @@ adjacent `_internal` directory.
 ## MVP capabilities
 
 - Windows microphone/line input selection
+- Per-program Windows WASAPI capture for Chrome, Spotify, KaraFun, and other
+  running applications, including their child processes
+- Simultaneous recording-device and per-program mixing for karaoke, with
+  independent 0–200% volume controls
 - Live stereo level meter with quiet and clipping guidance
 - Five-second original/processed record-and-playback sound check
 - Named Icecast 2, SHOUTcast 1, and SHOUTcast 2-compatible server profiles
@@ -79,11 +85,12 @@ adjacent `_internal` directory.
 
 ## Current limitations
 
-- One audio input at a time
+- One recording device and one optional program-audio source at a time
 - MP3 only
 - SHOUTcast 2 uses the DNAS legacy-source compatibility protocol, not native
   Ultravox 2.1
-- No input mixing or Windows speaker-loopback capture yet
+- Program-specific capture requires Windows build 20348 or newer and may return
+  silence for DRM-protected content
 - The server test briefly opens and closes the selected mount to validate source
   credentials. Do not run it against an active mount or stream ID.
 
@@ -109,9 +116,9 @@ See `docs/ROADMAP.md` for the planned production sequence.
 - Automatically restores the last good configuration if the main file is damaged.
 - Includes an Inno Setup installer definition and build script.
 
-Desktop-audio loopback remains deferred. The installed PortAudio wrapper does not
-offer WASAPI loopback, and the available Realtek Stereo Mix endpoint fails through
-its WDM-KS driver on the current test machine.
+Program-specific desktop audio is captured through a small native WASAPI
+process-loopback helper. It can be mixed with the selected recording device
+before metering, processing, sound tests, recording, and streaming.
 
 ## 0.3.0 — SHOUTcast support
 
@@ -270,4 +277,4 @@ an official SimpleCast release. See `TRADEMARKS.md`.
 The current beta binaries are intentionally unsigned. Windows may display a
 SmartScreen or Smart App Control warning; verify downloads using the published
 SHA-256 checksums. Build details are recorded in
-`docs/BUILD_PROVENANCE_0.9.0-beta.12.md`.
+`docs/BUILD_PROVENANCE_0.9.0-beta.13.md`.

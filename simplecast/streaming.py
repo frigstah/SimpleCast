@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import quote
 
-from .audio import AudioDevice, BroadcastAudioSource, GainControl
+from .audio import GainControl, PcmAudioSource, create_audio_source
 from .encoder import get_ffmpeg_exe
 from .models import ServerProfile
 from .processing import DEFAULT_PROCESSING_PRESET, filter_arguments
@@ -59,14 +59,16 @@ class StreamEngine:
         state_callback: Callable[[BroadcastState, str], None],
         level_callback: Callable[[float, float], None],
         gain: GainControl | None = None,
-        device_resolver: Callable[[AudioDevice], AudioDevice] | None = None,
+        device_resolver: Callable[[object], object] | None = None,
         recording_callback: Callable[[bool, str, Path | None], None] | None = None,
+        program_gain: GainControl | None = None,
     ) -> None:
         self.state_callback = state_callback
         self.level_callback = level_callback
         self.gain = gain or GainControl()
         self.device_resolver = device_resolver or (lambda device: device)
         self.recording_callback = recording_callback or (lambda *_: None)
+        self.program_gain = program_gain or GainControl()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._process: subprocess.Popen[bytes] | None = None
@@ -81,7 +83,7 @@ class StreamEngine:
 
     def start(
         self,
-        device: AudioDevice,
+        device: object,
         server: ServerProfile,
         password: str,
         quality: str,
@@ -136,7 +138,7 @@ class StreamEngine:
 
     def _run(
         self,
-        device: AudioDevice,
+        device: object,
         server: ServerProfile,
         password: str,
         quality: str,
@@ -153,14 +155,15 @@ class StreamEngine:
             while not self._stop.is_set():
                 state = BroadcastState.CONNECTING if first_attempt else BroadcastState.RECONNECTING
                 self.state_callback(state, f"Connecting to {server.name}…")
-                source: BroadcastAudioSource | None = None
+                source: PcmAudioSource | None = None
                 pump_errors: list[Exception] = []
                 try:
                     resolved_device = self.device_resolver(device)
-                    source = BroadcastAudioSource(
+                    source = create_audio_source(
                         resolved_device,
                         self.gain,
                         audio_system,
+                        self.program_gain,
                     )
                     source.start()
                     if recording_path is not None and recorder is None and not recording_failed:
@@ -248,6 +251,9 @@ class StreamEngine:
                             assert self._process.stdin is not None
                             self._process.stdin.write(block)
                             self._process.stdin.flush()
+                        except queue.Empty:
+                            if source.failure:
+                                raise RuntimeError(source.failure)
                         except (BrokenPipeError, OSError) as error:
                             if self._stop.is_set():
                                 break
@@ -326,7 +332,7 @@ class StreamEngine:
 
     def _start_ffmpeg(
         self,
-        source: BroadcastAudioSource,
+        source: PcmAudioSource,
         server: ServerProfile,
         password: str,
         quality: str,
@@ -639,8 +645,9 @@ class MultiStreamEngine:
         server_state_callback: Callable[[str, BroadcastState, str], None],
         level_callback: Callable[[float, float], None],
         gain: GainControl | None = None,
-        device_resolver: Callable[[AudioDevice], AudioDevice] | None = None,
+        device_resolver: Callable[[object], object] | None = None,
         recording_callback: Callable[[bool, str, Path | None], None] | None = None,
+        program_gain: GainControl | None = None,
     ) -> None:
         self.state_callback = state_callback
         self.server_state_callback = server_state_callback
@@ -648,9 +655,10 @@ class MultiStreamEngine:
         self.gain = gain or GainControl()
         self.device_resolver = device_resolver or (lambda device: device)
         self.recording_callback = recording_callback or (lambda *_: None)
+        self.program_gain = program_gain or GainControl()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._source: BroadcastAudioSource | None = None
+        self._source: PcmAudioSource | None = None
         self._workers: dict[str, _ServerWorker] = {}
         self._statuses: dict[str, tuple[BroadcastState, str]] = {}
         self._status_lock = threading.Lock()
@@ -678,7 +686,7 @@ class MultiStreamEngine:
 
     def start(
         self,
-        device: AudioDevice,
+        device: object,
         destinations: list[StreamDestination],
         quality: str,
         output_sample_rate: int = 44100,
@@ -725,7 +733,7 @@ class MultiStreamEngine:
 
     def _run(
         self,
-        device: AudioDevice,
+        device: object,
         destinations: list[StreamDestination],
         quality: str,
         output_sample_rate: int,
@@ -733,15 +741,16 @@ class MultiStreamEngine:
         recording_path: Path | None,
         processing_preset: str,
     ) -> None:
-        source: BroadcastAudioSource | None = None
+        source: PcmAudioSource | None = None
         recorder: Mp3FileWriter | None = None
         recording_failed = False
         try:
             resolved_device = self.device_resolver(device)
-            source = BroadcastAudioSource(
+            source = create_audio_source(
                 resolved_device,
                 self.gain,
                 audio_system,
+                self.program_gain,
             )
             self._source = source
             source.start()
@@ -792,6 +801,8 @@ class MultiStreamEngine:
                 try:
                     block = source.blocks.get(timeout=0.25)
                 except queue.Empty:
+                    if source.failure:
+                        raise RuntimeError(source.failure)
                     continue
                 if recorder is not None:
                     try:
