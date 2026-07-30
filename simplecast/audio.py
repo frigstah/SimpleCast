@@ -353,6 +353,7 @@ class AudioEngine:
         seconds: int = 5,
         progress: Callable[[int], None] | None = None,
         audio_system: str = "Automatic",
+        level_callback: LevelCallback | None = None,
     ) -> tuple[float, float]:
         self.stop_meter()
         if not isinstance(device, AudioDevice):
@@ -379,6 +380,11 @@ class AudioEngine:
                         source.channels,
                     )
                     frames.append(samples.astype(np.float32) / 32768.0)
+                    if level_callback:
+                        level_callback(
+                            *source.levels,
+                            source.peak_level,
+                        )
                     if progress:
                         remaining = max(
                             0,
@@ -413,7 +419,24 @@ class AudioEngine:
         last_remaining = seconds
 
         def receive(data: np.ndarray, _frames: int, _time: object, _status: object) -> None:
-            frames.append(self.gain.apply(data))
+            adjusted = self.gain.apply(data)
+            frames.append(adjusted)
+            if level_callback and adjusted.size:
+                levels = np.sqrt(
+                    np.mean(
+                        np.square(adjusted.astype(np.float64)),
+                        axis=0,
+                    )
+                )
+                left = float(levels[0])
+                right = float(
+                    levels[1] if len(levels) > 1 else levels[0]
+                )
+                level_callback(
+                    left,
+                    right,
+                    float(np.max(np.abs(adjusted))),
+                )
             if progress:
                 remaining = max(0, seconds - int(time.monotonic() - started))
                 nonlocal last_remaining

@@ -1701,6 +1701,29 @@ class SimpleCastApp(tk.Tk):
             sliderlength=18,
             sliderthickness=18,
         )
+        style.map(
+            "Horizontal.TScale",
+            background=[
+                ("disabled", COLORS["disabled_text"]),
+                ("!disabled", COLORS["surface"]),
+            ],
+            troughcolor=[
+                ("disabled", COLORS["disabled"]),
+                ("!disabled", COLORS["input"]),
+            ],
+            bordercolor=[
+                ("disabled", COLORS["disabled"]),
+                ("!disabled", COLORS["input"]),
+            ],
+            lightcolor=[
+                ("disabled", COLORS["disabled_text"]),
+                ("!disabled", COLORS["accent"]),
+            ],
+            darkcolor=[
+                ("disabled", COLORS["disabled_text"]),
+                ("!disabled", COLORS["accent"]),
+            ],
+        )
         style.configure(
             "TLabelframe",
             background=COLORS["bg"],
@@ -2683,11 +2706,12 @@ class SimpleCastApp(tk.Tk):
         self.processing_detail.pack(anchor="w")
 
     def _build_program_volume(self, parent: ttk.Frame) -> None:
-        ttk.Label(
+        self.program_volume_title = ttk.Label(
             parent,
             text="Program audio volume",
             style="CardMuted.TLabel",
-        ).pack(anchor="w", pady=(2, 0))
+        )
+        self.program_volume_title.pack(anchor="w", pady=(2, 0))
         row = ttk.Frame(parent, style="Card.TFrame")
         row.pack(fill="x", pady=(3, 8))
         self.program_volume_var = tk.DoubleVar(
@@ -4464,9 +4488,25 @@ class SimpleCastApp(tk.Tk):
         self._program_volume_changed("100")
 
     def _update_program_volume_controls(self) -> None:
-        state = "normal" if self.config.program_audio_enabled else "disabled"
+        enabled = self.config.program_audio_enabled
+        state = "normal" if enabled else "disabled"
         self.program_volume_slider.configure(state=state)
         self.program_volume_reset_button.configure(state=state)
+        self.program_volume_title.configure(
+            text=(
+                "Program audio volume"
+                if enabled
+                else "Program audio volume — off"
+            )
+        )
+        self.program_volume_label.configure(
+            text=(
+                f"{self.config.program_volume_percent}%"
+                if enabled
+                else "Off"
+            ),
+            style="Card.TLabel" if enabled else "CardMuted.TLabel",
+        )
 
     def _start_meter(self) -> None:
         if self.stream.active or self.recording.active:
@@ -4616,12 +4656,14 @@ class SimpleCastApp(tk.Tk):
             )
 
         def worker() -> None:
+            meter_restarted = False
             try:
                 rms, peak = self.audio.record_test(
                     selection,
                     self.last_test_path,
                     progress=progress,
                     audio_system=self.config.audio_system,
+                    level_callback=self._capture_meter_level,
                 )
                 process_test_file(
                     self.last_test_path,
@@ -4663,6 +4705,8 @@ class SimpleCastApp(tk.Tk):
                         self.play_processed_button.configure(state="normal"),
                     ),
                 )
+                self.after(0, self._start_meter)
+                meter_restarted = True
                 AudioEngine.play_file(self.processed_test_path)
             except Exception as error:
                 logging.exception("Sound test failed")
@@ -4675,15 +4719,17 @@ class SimpleCastApp(tk.Tk):
                     ),
                 )
             finally:
+                def finish_test() -> None:
+                    self.sound_button.configure(
+                        state="normal",
+                        text="Test my sound",
+                    )
+                    if not meter_restarted:
+                        self._start_meter()
+
                 self.after(
                     0,
-                    lambda: (
-                        self.sound_button.configure(
-                            state="normal",
-                            text="Test my sound",
-                        ),
-                        self._start_meter(),
-                    ),
+                    finish_test,
                 )
 
         threading.Thread(target=worker, daemon=True).start()

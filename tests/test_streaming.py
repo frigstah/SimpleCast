@@ -1,4 +1,8 @@
+import queue
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import sounddevice as sd
@@ -215,6 +219,45 @@ class AudioShutdownTests(unittest.TestCase):
                 for call in input_stream.call_args_list
             )
         )
+
+    @patch("simplecast.audio.time.monotonic")
+    @patch("simplecast.audio.create_audio_source")
+    def test_sound_check_emits_live_meter_levels(
+        self,
+        create_source,
+        monotonic,
+    ) -> None:
+        source = SimpleNamespace(
+            blocks=queue.Queue(),
+            levels=(0.2, 0.4),
+            peak_level=0.6,
+            channels=2,
+            sample_rate=48000,
+            active_api="Mixed audio",
+            failure="",
+            start=Mock(),
+            stop=Mock(),
+        )
+        source.blocks.put(
+            np.array([[1000, -1000]], dtype="<i2").tobytes()
+        )
+        create_source.return_value = source
+        monotonic.side_effect = [0.0, 0.0, 2.0]
+        levels: list[tuple[float, float, float]] = []
+        engine = AudioEngine()
+
+        with tempfile.TemporaryDirectory() as folder:
+            engine.record_test(
+                object(),
+                Path(folder) / "test.wav",
+                seconds=1,
+                level_callback=lambda left, right, peak: levels.append(
+                    (left, right, peak)
+                ),
+            )
+
+        self.assertEqual(levels, [(0.2, 0.4, 0.6)])
+        source.stop.assert_called_once_with()
 
 
 class GainAndQualityTests(unittest.TestCase):
