@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -12,6 +14,7 @@ from simplecast.app import (
     WS_THICKFRAME,
     SimpleCastApp,
 )
+from simplecast.models import AppConfig, ServerProfile
 
 
 class BroadcastStopBehaviorTests(unittest.TestCase):
@@ -71,6 +74,86 @@ class WindowChromeTests(unittest.TestCase):
         self.assertTrue(styled & WS_MINIMIZEBOX)
         self.assertTrue(styled & WS_MAXIMIZEBOX)
         self.assertTrue(styled & WS_SYSMENU)
+
+    def test_minimize_stays_on_taskbar_by_default(self) -> None:
+        app = SimpleNamespace(
+            config=SimpleNamespace(minimize_to_tray=False),
+            wm_state=Mock(return_value="iconic"),
+            after=Mock(),
+        )
+
+        SimpleCastApp._on_unmap(app, object())
+
+        app.after.assert_not_called()
+
+    def test_opt_in_minimize_schedules_tray_hide(self) -> None:
+        app = SimpleNamespace(
+            config=SimpleNamespace(minimize_to_tray=True),
+            wm_state=Mock(return_value="iconic"),
+            after=Mock(),
+            _minimize_to_tray=Mock(),
+        )
+
+        SimpleCastApp._on_unmap(app, object())
+
+        app.after.assert_called_once_with(100, app._minimize_to_tray)
+
+
+class RecordingFolderBehaviorTests(unittest.TestCase):
+    def test_open_folder_creates_and_opens_configured_location(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "Recordings"
+            app = SimpleNamespace(
+                _recording_folder=Mock(return_value=destination),
+            )
+            with patch("simplecast.app.os.startfile") as startfile:
+                SimpleCastApp.open_recording_folder(app)
+
+            self.assertTrue(destination.is_dir())
+            startfile.assert_called_once_with(str(destination))
+
+
+class MiniModeBehaviorTests(unittest.TestCase):
+    def test_server_order_places_favorites_first_in_saved_order(self) -> None:
+        one = ServerProfile(name="One")
+        two = ServerProfile(name="Two")
+        three = ServerProfile(name="Three")
+        config = AppConfig(
+            servers=[one, two, three],
+            favorite_server_ids=[three.id, one.id],
+        )
+
+        ordered = SimpleCastApp._mini_server_order(config)
+
+        self.assertEqual(
+            [server.id for server in ordered],
+            [three.id, one.id, two.id],
+        )
+
+    def test_long_server_names_are_shortened_for_mini_mode(self) -> None:
+        self.assertEqual(
+            SimpleCastApp._mini_server_name("A very long station name", 12),
+            "A very long…",
+        )
+
+    def test_server_menu_is_positioned_below_the_mini_selector(self) -> None:
+        app = SimpleNamespace(
+            update_idletasks=Mock(),
+            winfo_screenwidth=Mock(return_value=1920),
+            mini_server_button=SimpleNamespace(
+                winfo_rootx=Mock(return_value=900),
+                winfo_width=Mock(return_value=130),
+                winfo_rooty=Mock(return_value=500),
+                winfo_height=Mock(return_value=34),
+            ),
+            mini_dropdown=Mock(),
+        )
+
+        SimpleCastApp._position_mini_server_menu(app, 160)
+
+        app.mini_dropdown.geometry.assert_called_once_with(
+            "230x160+800+534"
+        )
 
 
 class ProgramVolumeBehaviorTests(unittest.TestCase):

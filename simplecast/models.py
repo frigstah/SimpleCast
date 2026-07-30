@@ -109,6 +109,7 @@ class AppConfig:
     metadata_format: str = "As written"
     start_with_windows: bool = False
     start_minimized: bool = False
+    minimize_to_tray: bool = False
     auto_broadcast: bool = False
     startup_delay_seconds: int = 10
     confirm_stop_broadcast: bool = True
@@ -250,6 +251,7 @@ class AppConfig:
             metadata_format=metadata_format,
             start_with_windows=bool(value.get("start_with_windows", False)),
             start_minimized=bool(value.get("start_minimized", False)),
+            minimize_to_tray=bool(value.get("minimize_to_tray", False)),
             auto_broadcast=bool(value.get("auto_broadcast", False)),
             startup_delay_seconds=startup_delay_seconds,
             confirm_stop_broadcast=bool(
@@ -284,6 +286,7 @@ class AppConfig:
             "metadata_format": self.metadata_format,
             "start_with_windows": self.start_with_windows,
             "start_minimized": self.start_minimized,
+            "minimize_to_tray": self.minimize_to_tray,
             "auto_broadcast": self.auto_broadcast,
             "startup_delay_seconds": self.startup_delay_seconds,
             "confirm_stop_broadcast": self.confirm_stop_broadcast,

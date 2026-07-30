@@ -221,6 +221,9 @@ class ServerProfileTests(unittest.TestCase):
 
 
 class ConfigStoreTests(unittest.TestCase):
+    def test_minimize_to_tray_is_opt_in_for_existing_configs(self) -> None:
+        self.assertFalse(AppConfig.from_dict({}).minimize_to_tray)
+
     def test_round_trip_does_not_contain_password(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             store = ConfigStore(Path(directory))
@@ -238,6 +241,7 @@ class ConfigStoreTests(unittest.TestCase):
                 metadata_format="Artist - Title (first two lines)",
                 start_with_windows=True,
                 start_minimized=True,
+                minimize_to_tray=True,
                 auto_broadcast=True,
                 startup_delay_seconds=30,
                 confirm_stop_broadcast=False,
@@ -267,6 +271,7 @@ class ConfigStoreTests(unittest.TestCase):
             )
             self.assertTrue(loaded.start_with_windows)
             self.assertTrue(loaded.start_minimized)
+            self.assertTrue(loaded.minimize_to_tray)
             self.assertTrue(loaded.auto_broadcast)
             self.assertEqual(loaded.startup_delay_seconds, 30)
             self.assertFalse(loaded.confirm_stop_broadcast)

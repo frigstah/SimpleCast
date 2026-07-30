@@ -68,7 +68,11 @@ adjacent `_internal` directory.
 - A persistent personal listener high for every saved station profile
 - Local 320 kbps MP3 recording during a broadcast or as a recording-only session
 - Timestamped recording files with live duration and file-size status
+- An Open folder action for the selected recording destination
 - Optional Windows startup, minimized tray launch, and automatic broadcasting
+- Normal Windows taskbar minimization by default, with optional minimize-to-tray
+- A 150×600 mini broadcaster with vertical stereo VU meters, start/stop
+  control, and a favorites-first animated server chooser
 - Cancellable startup countdown and saved-device readiness waiting
 - Sanitized support-report export
 - In-app beta-readiness check for audio, encoder, folders, stations, and signing
@@ -277,4 +281,4 @@ an official SimpleCast release. See `TRADEMARKS.md`.
 The current beta binaries are intentionally unsigned. Windows may display a
 SmartScreen or Smart App Control warning; verify downloads using the published
 SHA-256 checksums. Build details are recorded in
-`docs/BUILD_PROVENANCE_0.9.0-beta.14.md`.
+`docs/BUILD_PROVENANCE_0.9.0-beta.15.md`.

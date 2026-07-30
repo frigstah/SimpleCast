@@ -196,8 +196,21 @@ normally.
 Open **Recordings** in the sidebar to:
 
 - Choose where recordings are saved
+- Open the selected recording folder in Windows Explorer
 - Record every broadcast automatically
 - Make a local 320 kbps MP3 without broadcasting
+
+## Window and mini-mode controls
+
+Minimize normally keeps SimpleCast on the Windows taskbar. To hide it in the
+notification-area tray instead, open **Settings → Window behavior** and enable
+**Minimize makes the software go to tray**.
+
+Choose **MINI** in the title bar or **Open mini mode** under Window behavior for
+a compact 150×600 broadcaster. Mini mode provides vertical L/R VU meters,
+the live timer and status, a Start/Stop button, and a server chooser. Favorites
+are listed first in the animated server menu. Stop broadcasting before changing
+the selected server. Use the ↗ button to return to the complete interface.
 
 ## Update SimpleCast
 

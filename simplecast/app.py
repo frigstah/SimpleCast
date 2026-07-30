@@ -260,6 +260,9 @@ SKIN_WINDOW_SIZES = {
 COLORS = dict(THEMES["Classic SimpleCast"]["colors"])
 CUSTOM_TITLEBAR_HEIGHT = 32
 CUSTOM_RESIZE_MARGIN = 7
+MINI_MODE_WIDTH = 150
+MINI_MODE_HEIGHT = 600
+MINI_SERVER_MENU_WIDTH = 230
 WS_CAPTION = 0x00C00000
 WS_THICKFRAME = 0x00040000
 WS_MINIMIZEBOX = 0x00020000
@@ -379,11 +382,14 @@ class LevelMeter(tk.Canvas):
 
 class VerticalLevelMeter(tk.Canvas):
     def __init__(self, master: tk.Misc, **kwargs: object) -> None:
+        width = kwargs.pop("width", 30)
+        height = kwargs.pop("height", 165)
+        background = kwargs.pop("background", COLORS["surface"])
         super().__init__(
             master,
-            width=30,
-            height=165,
-            background=COLORS["surface"],
+            width=width,
+            height=height,
+            background=background,
             highlightthickness=0,
             **kwargs,
         )
@@ -960,9 +966,19 @@ class SimpleCastApp(tk.Tk):
         )
         self._volume_save_job: str | None = None
         self._program_volume_save_job: str | None = None
+        self._mini_active = False
+        self._mini_dropdown_open = False
+        self._mini_dropdown_height = 0
+        self._mini_dropdown_target = 0
+        self._mini_dropdown_job: str | None = None
+        self._normal_window_geometry = ""
+        self._normal_window_minsize = (minimum_width, minimum_height)
+        self._normal_window_maxsize = self.maxsize()
+        self._normal_window_resizable = self.resizable()
         self._closing = False
         self._restart_requested = False
         self._launched_by_windows = "--startup" in sys.argv[1:]
+        self._launch_in_mini_mode = "--mini" in sys.argv[1:]
         self._auto_start_active = False
         self._auto_start_job: str | None = None
         self._auto_start_remaining = 0
@@ -992,6 +1008,8 @@ class SimpleCastApp(tk.Tk):
         self.after(50, self._poll_meter_levels)
         self.after(1200, self._poll_listener_stats)
         self.after(400, self._apply_launch_automation)
+        if self._launch_in_mini_mode:
+            self.after(250, self.open_mini_mode)
 
     def _enable_custom_window_chrome(self) -> bool:
         if platform.system() != "Windows":
@@ -1131,6 +1149,20 @@ class SimpleCastApp(tk.Tk):
             width=5,
         )
         self._titlebar_maximize_button.pack(side="right", fill="y")
+        mini_button = tk.Button(
+            bar,
+            text="MINI",
+            command=self.open_mini_mode,
+            background=COLORS["bg"],
+            foreground=COLORS["muted"],
+            activebackground=COLORS["surface_hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI Semibold", 8),
+            width=6,
+        )
+        mini_button.pack(side="right", fill="y")
         minimize_button = tk.Button(
             bar,
             text="—",
@@ -1150,6 +1182,7 @@ class SimpleCastApp(tk.Tk):
             "icon": icon,
             "title": title,
             "drag": drag_area,
+            "mini": mini_button,
             "minimize": minimize_button,
             "maximize": self._titlebar_maximize_button,
             "close": close_button,
@@ -1184,6 +1217,9 @@ class SimpleCastApp(tk.Tk):
         )
 
     def _toggle_maximize(self, _event: object = None) -> None:
+        if self._mini_active:
+            self.close_mini_mode()
+            return
         if self.wm_state() == "zoomed":
             self.wm_state("normal")
             symbol = "□"
@@ -1203,7 +1239,7 @@ class SimpleCastApp(tk.Tk):
             background=COLORS["bg"],
             foreground=COLORS["muted"],
         )
-        for name in ("minimize", "maximize"):
+        for name in ("mini", "minimize", "maximize"):
             widgets[name].configure(
                 background=COLORS["bg"],
                 foreground=COLORS["text"],
@@ -1233,7 +1269,7 @@ class SimpleCastApp(tk.Tk):
         self.bind("<ButtonRelease-1>", self._custom_resize_end, add="+")
 
     def _resize_hit_test(self, event: tk.Event) -> str:
-        if self.wm_state() != "normal":
+        if self._mini_active or self.wm_state() != "normal":
             return ""
         x = event.x_root - self.winfo_rootx()
         y = event.y_root - self.winfo_rooty()
@@ -1331,6 +1367,631 @@ class SimpleCastApp(tk.Tk):
 
     def _custom_resize_end(self, _event: tk.Event) -> None:
         self._active_resize = None
+
+    def _build_mini_mode(self) -> None:
+        self.mini_frame = tk.Frame(
+            self,
+            background=COLORS["bg"],
+            highlightbackground=COLORS["line"],
+            highlightcolor=COLORS["accent"],
+            highlightthickness=1,
+        )
+        header = tk.Frame(
+            self.mini_frame,
+            background=COLORS["sidebar"],
+            height=36,
+        )
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        icon = tk.Label(
+            header,
+            image=self._brand_photo(22),
+            background=COLORS["sidebar"],
+            borderwidth=0,
+        )
+        icon.pack(side="left", padx=(7, 4))
+        drag = tk.Label(
+            header,
+            text="SIMPLECAST",
+            background=COLORS["sidebar"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI Semibold", 7),
+            anchor="w",
+        )
+        drag.pack(side="left", fill="both", expand=True)
+        close_button = tk.Button(
+            header,
+            text="×",
+            command=self.close,
+            background=COLORS["sidebar"],
+            foreground=COLORS["muted"],
+            activebackground=COLORS["error"],
+            activeforeground=COLORS["error_text"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 11),
+            width=2,
+        )
+        close_button.pack(side="right", fill="y")
+        restore_button = tk.Button(
+            header,
+            text="↗",
+            command=self.close_mini_mode,
+            background=COLORS["sidebar"],
+            foreground=COLORS["muted"],
+            activebackground=COLORS["surface_hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 9),
+            width=2,
+        )
+        restore_button.pack(side="right", fill="y")
+        minimize_button = tk.Button(
+            header,
+            text="—",
+            command=self.iconify,
+            background=COLORS["sidebar"],
+            foreground=COLORS["muted"],
+            activebackground=COLORS["surface_hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 9),
+            width=2,
+        )
+        minimize_button.pack(side="right", fill="y")
+        for widget in (header, icon, drag):
+            widget.bind("<ButtonPress-1>", self._titlebar_drag_start)
+            widget.bind("<B1-Motion>", self._titlebar_drag_move)
+
+        body = tk.Frame(
+            self.mini_frame,
+            background=COLORS["bg"],
+            padx=8,
+            pady=8,
+        )
+        body.pack(fill="both", expand=True)
+        self.mini_status_label = tk.Label(
+            body,
+            text="● OFFLINE",
+            background=COLORS["bg"],
+            foreground=COLORS["offline"],
+            font=("Segoe UI Semibold", 9),
+        )
+        self.mini_status_label.pack()
+        self.mini_timer_label = tk.Label(
+            body,
+            text="READY",
+            background=COLORS["bg"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI", 7),
+        )
+        self.mini_timer_label.pack(pady=(1, 7))
+
+        meter_card = tk.Frame(
+            body,
+            background=COLORS["surface"],
+            padx=8,
+            pady=9,
+        )
+        meter_card.pack(fill="x")
+        tk.Label(
+            meter_card,
+            text="LIVE SIGNAL",
+            background=COLORS["surface"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI Semibold", 7),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 6))
+        meter_pair = tk.Frame(
+            meter_card,
+            background=COLORS["surface"],
+        )
+        meter_pair.pack(pady=(0, 4))
+        left_channel = tk.Frame(
+            meter_pair,
+            background=COLORS["surface"],
+        )
+        left_channel.pack(side="left", padx=(0, 8))
+        right_channel = tk.Frame(
+            meter_pair,
+            background=COLORS["surface"],
+        )
+        right_channel.pack(side="left", padx=(8, 0))
+        self.mini_left_meter = VerticalLevelMeter(
+            left_channel,
+            width=36,
+            height=210,
+            background=COLORS["surface_alt"],
+        )
+        self.mini_left_meter.pack()
+        tk.Label(
+            left_channel,
+            text="L",
+            background=COLORS["surface"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI Semibold", 8),
+        ).pack(pady=(4, 0))
+        self.mini_right_meter = VerticalLevelMeter(
+            right_channel,
+            width=36,
+            height=210,
+            background=COLORS["surface_alt"],
+        )
+        self.mini_right_meter.pack()
+        tk.Label(
+            right_channel,
+            text="R",
+            background=COLORS["surface"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI Semibold", 8),
+        ).pack(pady=(4, 0))
+        tk.Label(
+            meter_card,
+            text="−60 dB              0 dB",
+            background=COLORS["surface"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI", 6),
+            anchor="center",
+        ).pack(fill="x")
+
+        self.mini_signal_detail = tk.Label(
+            body,
+            text="Recording device + program audio",
+            background=COLORS["bg"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI", 7),
+            wraplength=126,
+            justify="center",
+        )
+        self.mini_signal_detail.pack(fill="x", pady=(10, 0))
+        tk.Frame(
+            body,
+            background=COLORS["bg"],
+        ).pack(fill="both", expand=True)
+
+        self.mini_broadcast_button = tk.Button(
+            body,
+            text="▶  START",
+            command=self._mini_toggle_broadcast,
+            background=COLORS["accent"],
+            foreground=COLORS["accent_text"],
+            activebackground=COLORS["accent_hover"],
+            activeforeground=COLORS["accent_text"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI Semibold", 9),
+            pady=10,
+        )
+        self.mini_broadcast_button.pack(fill="x", pady=(8, 8))
+        tk.Label(
+            body,
+            text="SERVER",
+            background=COLORS["bg"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI Semibold", 7),
+        ).pack(anchor="w")
+        self.mini_server_button = tk.Button(
+            body,
+            text="No server selected  ▾",
+            command=self._toggle_mini_server_menu,
+            background=COLORS["surface_alt"],
+            foreground=COLORS["text"],
+            activebackground=COLORS["surface_hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 8),
+            anchor="w",
+            padx=7,
+            pady=7,
+            wraplength=116,
+        )
+        self.mini_server_button.pack(fill="x")
+
+        self.mini_dropdown = tk.Toplevel(self)
+        self.mini_dropdown.withdraw()
+        self.mini_dropdown.overrideredirect(True)
+        try:
+            self.mini_dropdown.transient(self)
+            self.mini_dropdown.wm_attributes("-toolwindow", True)
+        except tk.TclError:
+            pass
+        self.mini_dropdown_shell = tk.Frame(
+            self.mini_dropdown,
+            background=COLORS["surface"],
+            highlightbackground=COLORS["line"],
+            highlightthickness=1,
+        )
+        self.mini_dropdown_shell.pack(fill="both", expand=True)
+        self.mini_dropdown_canvas = tk.Canvas(
+            self.mini_dropdown_shell,
+            background=COLORS["surface"],
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self.mini_dropdown_scrollbar = ttk.Scrollbar(
+            self.mini_dropdown_shell,
+            orient="vertical",
+            command=self.mini_dropdown_canvas.yview,
+        )
+        self.mini_dropdown_canvas.configure(
+            yscrollcommand=self.mini_dropdown_scrollbar.set
+        )
+        self.mini_dropdown_scrollbar.pack(side="right", fill="y")
+        self.mini_dropdown_canvas.pack(side="left", fill="both", expand=True)
+        self.mini_dropdown_content = tk.Frame(
+            self.mini_dropdown_canvas,
+            background=COLORS["surface"],
+        )
+        self.mini_dropdown_window = self.mini_dropdown_canvas.create_window(
+            (0, 0),
+            window=self.mini_dropdown_content,
+            anchor="nw",
+        )
+        self.mini_dropdown_content.bind(
+            "<Configure>",
+            lambda _event: self.mini_dropdown_canvas.configure(
+                scrollregion=self.mini_dropdown_canvas.bbox("all")
+            ),
+        )
+        self.mini_dropdown_canvas.bind(
+            "<Configure>",
+            lambda event: self.mini_dropdown_canvas.itemconfigure(
+                self.mini_dropdown_window,
+                width=event.width,
+            ),
+        )
+        self.mini_dropdown_canvas.bind(
+            "<MouseWheel>",
+            self._scroll_mini_server_menu,
+        )
+        self.mini_dropdown.bind(
+            "<Escape>",
+            lambda _event: self._close_mini_server_menu(),
+        )
+
+    @staticmethod
+    def _mini_server_order(config: AppConfig) -> list[ServerProfile]:
+        by_id = {server.id: server for server in config.servers}
+        favorites = [
+            by_id[server_id]
+            for server_id in config.favorite_server_ids
+            if server_id in by_id
+        ]
+        favorite_ids = {server.id for server in favorites}
+        return favorites + [
+            server
+            for server in config.servers
+            if server.id not in favorite_ids
+        ]
+
+    @staticmethod
+    def _mini_server_name(name: str, limit: int = 18) -> str:
+        return name if len(name) <= limit else f"{name[:limit - 1]}…"
+
+    def open_mini_mode(self) -> None:
+        if self._mini_active or self._closing:
+            return
+        if not hasattr(self, "mini_frame"):
+            self._build_mini_mode()
+        if self.wm_state() == "zoomed":
+            self.wm_state("normal")
+        self.update_idletasks()
+        self._normal_window_geometry = self.geometry()
+        self._normal_window_minsize = self.minsize()
+        self._normal_window_maxsize = self.maxsize()
+        self._normal_window_resizable = self.resizable()
+        x = min(
+            max(0, self.winfo_x() + self.winfo_width() - MINI_MODE_WIDTH),
+            max(0, self.winfo_screenwidth() - MINI_MODE_WIDTH),
+        )
+        y = min(
+            max(0, self.winfo_y()),
+            max(0, self.winfo_screenheight() - MINI_MODE_HEIGHT),
+        )
+        self._mini_active = True
+        self.main_window_frame.pack_forget()
+        self.mini_frame.pack(fill="both", expand=True)
+        self.resizable(False, False)
+        self.minsize(MINI_MODE_WIDTH, MINI_MODE_HEIGHT)
+        self.maxsize(MINI_MODE_WIDTH, MINI_MODE_HEIGHT)
+        self.geometry(
+            f"{MINI_MODE_WIDTH}x{MINI_MODE_HEIGHT}+{x}+{y}"
+        )
+        if self._custom_chrome_enabled:
+            self._enable_custom_window_chrome()
+        self._refresh_mini_state()
+        self.lift()
+
+    def close_mini_mode(self) -> None:
+        if not self._mini_active:
+            return
+        self._close_mini_server_menu(immediate=True)
+        self._mini_active = False
+        self.mini_frame.pack_forget()
+        self.main_window_frame.pack(fill="both", expand=True)
+        self.maxsize(*self._normal_window_maxsize)
+        self.minsize(*self._normal_window_minsize)
+        self.resizable(*self._normal_window_resizable)
+        if self._normal_window_geometry:
+            self.geometry(self._normal_window_geometry)
+        if self._custom_chrome_enabled:
+            self._enable_custom_window_chrome()
+        self.lift()
+        self.focus_force()
+
+    def _mini_toggle_broadcast(self) -> None:
+        if not self.stream.active and (
+            self.current_device is None
+            or not self.config.enabled_servers()
+            or (
+                self.config.program_audio_enabled
+                and self.current_program is None
+            )
+        ):
+            self.close_mini_mode()
+        self.toggle_broadcast()
+
+    def _refresh_mini_state(self) -> None:
+        if not hasattr(self, "mini_status_label"):
+            return
+        colors = {
+            BroadcastState.ON_AIR: COLORS["error"],
+            BroadcastState.CONNECTING: COLORS["warning"],
+            BroadcastState.RECONNECTING: COLORS["warning"],
+            BroadcastState.ERROR: COLORS["error"],
+            BroadcastState.OFFLINE: COLORS["offline"],
+        }
+        self.mini_status_label.configure(
+            text=f"● {self.state.value.upper()}",
+            foreground=colors[self.state],
+        )
+        active = self.stream.active
+        self.mini_broadcast_button.configure(
+            text="■  STOP" if active else "▶  START",
+            background=COLORS["error"] if active else COLORS["accent"],
+            foreground=(
+                COLORS["error_text"] if active else COLORS["accent_text"]
+            ),
+            activebackground=(
+                COLORS["error"] if active else COLORS["accent_hover"]
+            ),
+            activeforeground=(
+                COLORS["error_text"] if active else COLORS["accent_text"]
+            ),
+        )
+        enabled = self.config.enabled_servers()
+        if len(enabled) == 1:
+            server_text = self._mini_server_name(enabled[0].name)
+        elif enabled:
+            server_text = f"{len(enabled)} servers"
+        elif self.config.servers:
+            server_text = "Choose server"
+        else:
+            server_text = "No servers"
+        self.mini_server_button.configure(
+            text=f"{server_text}  {'▴' if self._mini_dropdown_open else '▾'}"
+        )
+        source_parts = []
+        if self.current_device is not None:
+            source_parts.append(self._mini_server_name(
+                self.current_device.name,
+                24,
+            ))
+        if self.config.program_audio_enabled:
+            source_parts.append(
+                self._mini_server_name(
+                    (
+                        self.current_program.name
+                        if self.current_program is not None
+                        else "Program unavailable"
+                    ),
+                    24,
+                )
+            )
+        self.mini_signal_detail.configure(
+            text=" + ".join(source_parts) if source_parts else "No audio input"
+        )
+        if self._mini_dropdown_open:
+            self._refresh_mini_server_menu()
+
+    def _toggle_mini_server_menu(self) -> None:
+        if self._mini_dropdown_open:
+            self._close_mini_server_menu()
+            return
+        if self._mini_dropdown_job is not None:
+            self.after_cancel(self._mini_dropdown_job)
+            self._mini_dropdown_job = None
+        self._mini_dropdown_open = True
+        self._refresh_mini_server_menu()
+        self.mini_dropdown.update_idletasks()
+        requested = self.mini_dropdown_content.winfo_reqheight() + 2
+        screen_limit = max(
+            56,
+            self.winfo_screenheight() - MINI_MODE_HEIGHT - 12,
+        )
+        self._mini_dropdown_target = min(
+            310,
+            screen_limit,
+            max(56, requested),
+        )
+        self.mini_server_button.configure(
+            text=self.mini_server_button.cget("text").replace("▾", "▴")
+        )
+        self._prepare_mini_server_menu(self._mini_dropdown_target)
+        self.mini_dropdown.lift()
+        self._animate_mini_server_menu()
+
+    def _close_mini_server_menu(self, immediate: bool = False) -> None:
+        if self._mini_dropdown_job is not None:
+            self.after_cancel(self._mini_dropdown_job)
+            self._mini_dropdown_job = None
+        self._mini_dropdown_open = False
+        self._mini_dropdown_target = 0
+        if hasattr(self, "mini_server_button"):
+            self.mini_server_button.configure(
+                text=self.mini_server_button.cget("text").replace("▴", "▾")
+            )
+        if immediate:
+            self._mini_dropdown_height = 0
+            if hasattr(self, "mini_dropdown"):
+                self.mini_dropdown.withdraw()
+            return
+        self._animate_mini_server_menu()
+
+    def _prepare_mini_server_menu(self, menu_height: int) -> None:
+        """Make room below mini mode so its external menu stays visible."""
+
+        self.update_idletasks()
+        button_bottom = (
+            self.mini_server_button.winfo_rooty()
+            + self.mini_server_button.winfo_height()
+        )
+        overflow = button_bottom + menu_height + 4 - self.winfo_screenheight()
+        if overflow > 0:
+            self.geometry(
+                f"+{self.winfo_x()}+{max(0, self.winfo_y() - overflow)}"
+            )
+            self.update_idletasks()
+
+    def _position_mini_server_menu(self, menu_height: int) -> None:
+        self.update_idletasks()
+        screen_width = self.winfo_screenwidth()
+        menu_width = min(MINI_SERVER_MENU_WIDTH, screen_width - 8)
+        button_right = (
+            self.mini_server_button.winfo_rootx()
+            + self.mini_server_button.winfo_width()
+        )
+        x = min(
+            max(4, button_right - menu_width),
+            max(4, screen_width - menu_width - 4),
+        )
+        y = (
+            self.mini_server_button.winfo_rooty()
+            + self.mini_server_button.winfo_height()
+        )
+        self.mini_dropdown.geometry(
+            f"{menu_width}x{max(1, menu_height)}+{x}+{y}"
+        )
+
+    def _animate_mini_server_menu(self) -> None:
+        self._mini_dropdown_job = None
+        target = self._mini_dropdown_target
+        current = self._mini_dropdown_height
+        if current == target:
+            if target == 0:
+                self.mini_dropdown.withdraw()
+            return
+        distance = target - current
+        step = max(12, abs(distance) // 4)
+        if distance > 0:
+            current = min(target, current + step)
+        else:
+            current = max(target, current - step)
+        self._mini_dropdown_height = current
+        if current:
+            self._position_mini_server_menu(current)
+            self.mini_dropdown.deiconify()
+            self.mini_dropdown.lift()
+        if current != target:
+            self._mini_dropdown_job = self.after(
+                14,
+                self._animate_mini_server_menu,
+            )
+        elif current == 0:
+            self.mini_dropdown.withdraw()
+
+    def _refresh_mini_server_menu(self) -> None:
+        for child in self.mini_dropdown_content.winfo_children():
+            child.destroy()
+        ordered = self._mini_server_order(self.config)
+        favorite_ids = set(self.config.favorite_server_ids)
+        if self.stream.active:
+            tk.Label(
+                self.mini_dropdown_content,
+                text="Stop broadcast to switch",
+                background=COLORS["surface"],
+                foreground=COLORS["warning"],
+                font=("Segoe UI Semibold", 7),
+                pady=6,
+            ).pack(fill="x")
+        if not ordered:
+            tk.Label(
+                self.mini_dropdown_content,
+                text="No servers added",
+                background=COLORS["surface"],
+                foreground=COLORS["muted"],
+                font=("Segoe UI", 8),
+                pady=14,
+            ).pack(fill="x")
+            return
+        favorite_count = sum(
+            server.id in favorite_ids
+            for server in ordered
+        )
+        for index, server in enumerate(ordered):
+            if index == 0 and favorite_count:
+                self._mini_server_heading("★  FAVORITES")
+            if index == favorite_count and favorite_count < len(ordered):
+                self._mini_server_heading("ALL SERVERS")
+            selected = server.id in self.config.enabled_server_ids
+            prefix = "✓  " if selected else "★  " if server.id in favorite_ids else "   "
+            button = tk.Button(
+                self.mini_dropdown_content,
+                text=f"{prefix}{self._mini_server_name(server.name, 16)}",
+                command=lambda server_id=server.id: self._select_mini_server(
+                    server_id
+                ),
+                state="disabled" if self.stream.active else "normal",
+                background=(
+                    COLORS["accent_dark"]
+                    if selected
+                    else COLORS["surface"]
+                ),
+                foreground=COLORS["text"],
+                disabledforeground=COLORS["disabled_text"],
+                activebackground=COLORS["surface_hover"],
+                activeforeground=COLORS["text"],
+                relief="flat",
+                borderwidth=0,
+                anchor="w",
+                font=("Segoe UI", 8),
+                padx=6,
+                pady=5,
+            )
+            button.pack(fill="x")
+            button.bind("<MouseWheel>", self._scroll_mini_server_menu)
+
+    def _mini_server_heading(self, text: str) -> None:
+        tk.Label(
+            self.mini_dropdown_content,
+            text=text,
+            background=COLORS["surface_alt"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI Semibold", 7),
+            anchor="w",
+            padx=6,
+            pady=4,
+        ).pack(fill="x")
+
+    def _scroll_mini_server_menu(self, event: tk.Event) -> str:
+        self.mini_dropdown_canvas.yview_scroll(
+            int(-event.delta / 120),
+            "units",
+        )
+        return "break"
+
+    def _select_mini_server(self, server_id: str) -> None:
+        if self.stream.active:
+            return
+        if self.config.select_only_server(server_id):
+            self._close_mini_server_menu()
+            self.save_config()
+            self.refresh_station()
+            return
+        self._close_mini_server_menu()
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self)
@@ -1760,6 +2421,7 @@ class SimpleCastApp(tk.Tk):
 
     def _build(self) -> None:
         window = ttk.Frame(self)
+        self.main_window_frame = window
         window.pack(fill="both", expand=True)
         if self._custom_chrome_enabled:
             self._build_custom_titlebar(window)
@@ -3008,6 +3670,12 @@ class SimpleCastApp(tk.Tk):
             state="readonly",
         )
         self.recording_folder_entry.pack(side="left", fill="x", expand=True)
+        self.recording_folder_open_button = ttk.Button(
+            folder_row,
+            text="Open folder",
+            command=self.open_recording_folder,
+        )
+        self.recording_folder_open_button.pack(side="right", padx=(10, 0))
         self.recording_folder_button = ttk.Button(
             folder_row,
             text="Choose folder",
@@ -3100,6 +3768,40 @@ class SimpleCastApp(tk.Tk):
         self.theme_description.pack(anchor="w", pady=(6, 0))
         if self.config.ui_skin != "Classic SimpleCast":
             self.theme_combo.configure(state="disabled")
+
+        window_behavior = self._card(root)
+        window_behavior.pack(fill="x", pady=(0, 12))
+        window_top = ttk.Frame(window_behavior, style="Card.TFrame")
+        window_top.pack(fill="x")
+        ttk.Label(
+            window_top,
+            text="Window behavior",
+            style="CardTitle.TLabel",
+        ).pack(side="left")
+        ttk.Button(
+            window_top,
+            text="Open mini mode",
+            command=self.open_mini_mode,
+        ).pack(side="right")
+        self.minimize_to_tray_var = tk.BooleanVar(
+            value=self.config.minimize_to_tray
+        )
+        ttk.Checkbutton(
+            window_behavior,
+            text="Minimize makes the software go to tray",
+            variable=self.minimize_to_tray_var,
+            command=self._window_setting_changed,
+            style="Card.TCheckbutton",
+        ).pack(anchor="w", pady=(12, 0))
+        ttk.Label(
+            window_behavior,
+            text=(
+                "Off by default. When off, Minimize keeps SimpleCast on the "
+                "Windows taskbar."
+            ),
+            style="CardMuted.TLabel",
+            wraplength=780,
+        ).pack(anchor="w", pady=(5, 0))
 
         broadcast_controls = self._card(root)
         broadcast_controls.pack(fill="x", pady=(0, 12))
@@ -3793,6 +4495,10 @@ class SimpleCastApp(tk.Tk):
         self.config.confirm_stop_broadcast = self.confirm_stop_var.get()
         self.save_config()
 
+    def _window_setting_changed(self) -> None:
+        self.config.minimize_to_tray = self.minimize_to_tray_var.get()
+        self.save_config()
+
     def _skin_selected(self, _event: object = None) -> None:
         skin_name = self.skin_var.get()
         if skin_name not in SKINS:
@@ -4276,6 +4982,19 @@ class SimpleCastApp(tk.Tk):
         self.recording_folder_var.set(selected)
         self.save_config()
 
+    def open_recording_folder(self) -> None:
+        folder = self._recording_folder()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(folder))
+        except (AttributeError, OSError) as error:
+            logging.exception("Could not open the recording folder")
+            messagebox.showerror(
+                "Could not open folder",
+                str(error),
+                parent=self,
+            )
+
     def _record_broadcasts_changed(self) -> None:
         self.config.record_broadcasts = self.record_broadcasts_var.get()
         self.save_config()
@@ -4564,6 +5283,15 @@ class SimpleCastApp(tk.Tk):
         db = 20 * math.log10(rms)
         return max(0.0, min(1.0, (db + 60) / 60))
 
+    def _set_level_widgets(self, left: float, right: float) -> None:
+        left_level = self._linear_meter(left)
+        right_level = self._linear_meter(right)
+        self.left_meter.set_level(left_level)
+        self.right_meter.set_level(right_level)
+        if hasattr(self, "mini_left_meter"):
+            self.mini_left_meter.set_level(left_level)
+            self.mini_right_meter.set_level(right_level)
+
     def _on_level(
         self,
         left: float,
@@ -4590,10 +5318,7 @@ class SimpleCastApp(tk.Tk):
         try:
             self.after(
                 0,
-                lambda: (
-                    self.left_meter.set_level(self._linear_meter(left)),
-                    self.right_meter.set_level(self._linear_meter(right)),
-                ),
+                lambda: self._set_level_widgets(left, right),
             )
         except RuntimeError:
             pass
@@ -4611,8 +5336,7 @@ class SimpleCastApp(tk.Tk):
     def _poll_meter_levels(self) -> None:
         if not self.stream.active:
             left, right = self._meter_levels
-            self.left_meter.set_level(self._linear_meter(left))
-            self.right_meter.set_level(self._linear_meter(right))
+            self._set_level_widgets(left, right)
             if self._meter_peak >= 0.995:
                 now = time.monotonic()
                 if now - self._last_clip_warning >= 2:
@@ -4942,6 +5666,7 @@ class SimpleCastApp(tk.Tk):
     def refresh_station(self) -> None:
         self._refresh_server_choices()
         self._refresh_quick_stations()
+        self._refresh_mini_state()
         for child in self.server_status_frame.winfo_children():
             child.destroy()
         self.server_status_labels = {}
@@ -5505,15 +6230,20 @@ class SimpleCastApp(tk.Tk):
             self.record_broadcasts_check.configure(state="disabled")
             self._refresh_server_choices()
             self._refresh_quick_stations()
+        self._refresh_mini_state()
 
     def _update_timer(self) -> None:
         if self.stream.started_at:
             elapsed = int(time.monotonic() - self.stream.started_at)
             hours, remainder = divmod(elapsed, 3600)
             minutes, seconds = divmod(remainder, 60)
-            self.timer_label.configure(text=f"{hours:02}:{minutes:02}:{seconds:02}")
+            timer_text = f"{hours:02}:{minutes:02}:{seconds:02}"
+            self.timer_label.configure(text=timer_text)
         else:
+            timer_text = ""
             self.timer_label.configure(text="")
+        if hasattr(self, "mini_timer_label"):
+            self.mini_timer_label.configure(text=timer_text or "READY")
         recording_started = (
             self.stream.recording_started_at or self.recording.started_at
         )
@@ -5597,6 +6327,7 @@ class SimpleCastApp(tk.Tk):
             f"Recording folder: {self._recording_folder()}",
             f"Start with Windows: {self.config.start_with_windows}",
             f"Start minimized: {self.config.start_minimized}",
+            f"Minimize to tray: {self.config.minimize_to_tray}",
             f"Automatic broadcast: {self.config.auto_broadcast}",
             f"Startup delay: {self.config.startup_delay_seconds}s",
             (
@@ -5734,11 +6465,14 @@ class SimpleCastApp(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_unmap(self, _event: object) -> None:
-        if self.wm_state() == "iconic":
+        if self.config.minimize_to_tray and self.wm_state() == "iconic":
             self.after(100, self._minimize_to_tray)
 
     def _minimize_to_tray(self) -> None:
-        if self.wm_state() == "iconic":
+        if (
+            self.config.minimize_to_tray
+            and self.wm_state() == "iconic"
+        ):
             self.withdraw()
             try:
                 self.tray.notify(
@@ -5751,6 +6485,8 @@ class SimpleCastApp(tk.Tk):
     def show_window(self) -> None:
         self.deiconify()
         self.wm_state("normal")
+        if self._custom_chrome_enabled:
+            self.after(0, self._enable_custom_window_chrome)
         self.lift()
         self.focus_force()
 
