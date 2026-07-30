@@ -23,6 +23,7 @@ from .audio import (
     AudioEngine,
     CaptureSelection,
     GainControl,
+    ReverbControl,
     list_input_devices,
 )
 from .config_store import ConfigStore
@@ -912,7 +913,15 @@ class SimpleCastApp(tk.Tk):
         self.program_gain = GainControl(
             self.config.program_volume_percent
         )
-        self.audio = AudioEngine(self.gain, self.program_gain)
+        self.reverb = ReverbControl(
+            self.config.reverb_enabled,
+            self.config.reverb_amount_percent,
+        )
+        self.audio = AudioEngine(
+            self.gain,
+            self.program_gain,
+            self.reverb,
+        )
         self.devices: list[AudioDevice] = []
         self.programs: list[AudioProgram] = []
         self.current_device: AudioDevice | None = None
@@ -935,6 +944,7 @@ class SimpleCastApp(tk.Tk):
             self._resolve_device,
             self._on_broadcast_recording,
             self.program_gain,
+            self.reverb,
         )
         self.recording = RecordingEngine(
             self._on_recording_state,
@@ -942,6 +952,7 @@ class SimpleCastApp(tk.Tk):
             self.gain,
             self._resolve_device,
             self.program_gain,
+            self.reverb,
         )
         self.metadata_watcher = MetadataFileWatcher(
             self._on_metadata_file_title,
@@ -966,6 +977,7 @@ class SimpleCastApp(tk.Tk):
         )
         self._volume_save_job: str | None = None
         self._program_volume_save_job: str | None = None
+        self._reverb_save_job: str | None = None
         self._mini_active = False
         self._mini_dropdown_open = False
         self._mini_dropdown_height = 0
@@ -2967,6 +2979,7 @@ class SimpleCastApp(tk.Tk):
             command=self._reset_volume,
         ).pack(side="left", padx=(8, 0))
         self._build_program_volume(controls)
+        self._build_reverb_controls(controls, wraplength=330)
 
         ttk.Label(controls, text="Processing", style="CardMuted.TLabel").pack(anchor="w")
         self.processing_var = tk.StringVar(value=self.config.processing_preset)
@@ -3376,6 +3389,7 @@ class SimpleCastApp(tk.Tk):
             command=self._reset_volume,
         ).pack(side="left", padx=(8, 0))
         self._build_program_volume(parent)
+        self._build_reverb_controls(parent, wraplength=wraplength)
 
         ttk.Label(
             parent,
@@ -3440,6 +3454,68 @@ class SimpleCastApp(tk.Tk):
             command=self._reset_program_volume,
         )
         self.program_volume_reset_button.pack(side="left", padx=(8, 0))
+
+    def _build_reverb_controls(
+        self,
+        parent: ttk.Frame,
+        *,
+        wraplength: int,
+    ) -> None:
+        heading = ttk.Frame(parent, style="Card.TFrame")
+        heading.pack(fill="x", pady=(2, 0))
+        self.reverb_title = ttk.Label(
+            heading,
+            text="Microphone reverb",
+            style="CardMuted.TLabel",
+        )
+        self.reverb_title.pack(side="left")
+        self.reverb_enabled_var = tk.BooleanVar(
+            value=self.config.reverb_enabled
+        )
+        self.reverb_toggle = ttk.Checkbutton(
+            heading,
+            text="On",
+            variable=self.reverb_enabled_var,
+            command=self._reverb_enabled_changed,
+        )
+        self.reverb_toggle.pack(side="right")
+
+        amount = ttk.Frame(parent, style="Card.TFrame")
+        amount.pack(fill="x", pady=(3, 3))
+        self.reverb_amount_var = tk.DoubleVar(
+            value=self.config.reverb_amount_percent
+        )
+        self.reverb_amount_slider = ttk.Scale(
+            amount,
+            from_=0,
+            to=100,
+            variable=self.reverb_amount_var,
+            command=self._reverb_amount_changed,
+        )
+        self.reverb_amount_slider.pack(
+            side="left",
+            fill="x",
+            expand=True,
+        )
+        self.reverb_amount_label = ttk.Label(
+            amount,
+            text=f"{self.config.reverb_amount_percent}%",
+            width=6,
+            anchor="e",
+            style="Card.TLabel",
+        )
+        self.reverb_amount_label.pack(side="left", padx=(8, 0))
+        self.reverb_detail = ttk.Label(
+            parent,
+            text=(
+                "Adds room ambience to the recording device only; "
+                "program audio stays dry."
+            ),
+            style="CardMuted.TLabel",
+            wraplength=wraplength,
+        )
+        self.reverb_detail.pack(anchor="w", pady=(0, 8))
+        self._update_reverb_controls()
 
     def _build_alt_signal_panel(
         self,
@@ -5241,6 +5317,53 @@ class SimpleCastApp(tk.Tk):
         self.program_volume_var.set(100)
         self._program_volume_changed("100")
 
+    def _reverb_enabled_changed(self) -> None:
+        enabled = self.reverb_enabled_var.get()
+        self.config.reverb_enabled = enabled
+        self.reverb.set_enabled(enabled)
+        self._update_reverb_controls()
+        self._invalidate_sound_test()
+        self.save_config()
+
+    def _reverb_amount_changed(self, value: str) -> None:
+        percent = int(round(float(value)))
+        self.config.reverb_amount_percent = percent
+        self.reverb.set_amount_percent(percent)
+        if self.config.reverb_enabled:
+            self.reverb_amount_label.configure(text=f"{percent}%")
+        self._invalidate_sound_test()
+        if self._reverb_save_job is not None:
+            self.after_cancel(self._reverb_save_job)
+        self._reverb_save_job = self.after(300, self._save_reverb)
+
+    def _save_reverb(self) -> None:
+        self._reverb_save_job = None
+        self.save_config()
+
+    def _update_reverb_controls(self) -> None:
+        enabled = self.config.reverb_enabled
+        self.reverb_amount_slider.configure(
+            state="normal" if enabled else "disabled"
+        )
+        self.reverb_title.configure(
+            text="Microphone reverb" if enabled else "Microphone reverb — off"
+        )
+        self.reverb_amount_label.configure(
+            text=(
+                f"{self.config.reverb_amount_percent}%"
+                if enabled
+                else "Off"
+            ),
+            style="Card.TLabel" if enabled else "CardMuted.TLabel",
+        )
+
+    def _invalidate_sound_test(self) -> None:
+        self._test_ready = False
+        if hasattr(self, "play_original_button"):
+            self.play_original_button.configure(state="disabled")
+        if hasattr(self, "play_processed_button"):
+            self.play_processed_button.configure(state="disabled")
+
     def _update_program_volume_controls(self) -> None:
         enabled = self.config.program_audio_enabled
         state = "normal" if enabled else "disabled"
@@ -6359,6 +6482,12 @@ class SimpleCastApp(tk.Tk):
             f"Processing: {self.config.processing_preset}",
             f"Recording device volume: {self.config.input_volume_percent}%",
             f"Program audio volume: {self.config.program_volume_percent}%",
+            (
+                "Microphone reverb: "
+                f"{self.config.reverb_amount_percent}%"
+                if self.config.reverb_enabled
+                else "Microphone reverb: Off"
+            ),
             f"Record broadcasts: {self.config.record_broadcasts}",
             f"Recording folder: {self._recording_folder()}",
             f"Start with Windows: {self.config.start_with_windows}",

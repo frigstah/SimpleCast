@@ -57,6 +57,100 @@ class GainControl:
         return np.clip(data * self.multiplier, -1.0, 1.0)
 
 
+class ReverbControl:
+    """Thread-safe microphone reverb settings shared with live capture."""
+
+    def __init__(self, enabled: bool = False, amount_percent: int = 25) -> None:
+        self._lock = threading.Lock()
+        self._enabled = bool(enabled)
+        self._amount = 0.25
+        self.set_amount_percent(amount_percent)
+
+    def set_enabled(self, enabled: bool) -> None:
+        with self._lock:
+            self._enabled = bool(enabled)
+
+    def set_amount_percent(self, amount_percent: float) -> None:
+        with self._lock:
+            self._amount = max(
+                0.0,
+                min(1.0, float(amount_percent) / 100.0),
+            )
+
+    @property
+    def settings(self) -> tuple[bool, float]:
+        with self._lock:
+            return self._enabled, self._amount
+
+
+class SimpleReverb:
+    """Small, low-latency multi-tap room effect for microphone audio."""
+
+    _TAPS = (
+        (31.0, 0.95),
+        (47.0, 0.82),
+        (71.0, 0.70),
+        (103.0, 0.58),
+        (149.0, 0.47),
+        (211.0, 0.37),
+        (307.0, 0.28),
+        (421.0, 0.20),
+    )
+
+    def __init__(
+        self,
+        sample_rate: int,
+        channels: int,
+        control: ReverbControl,
+    ) -> None:
+        self.control = control
+        self.channels = max(1, int(channels))
+        self.delays = tuple(
+            max(1, int(round(sample_rate * milliseconds / 1000.0)))
+            for milliseconds, _gain in self._TAPS
+        )
+        self.gains = tuple(gain for _milliseconds, gain in self._TAPS)
+        self._gain_total = sum(self.gains)
+        self._history = np.zeros(
+            (max(self.delays), self.channels),
+            dtype=np.float32,
+        )
+        self._enabled_last_block = False
+
+    def apply(self, data: np.ndarray) -> np.ndarray:
+        if data.size == 0:
+            return data
+        enabled, amount = self.control.settings
+        if not enabled or amount <= 0.0:
+            if self._enabled_last_block:
+                self._history.fill(0.0)
+            self._enabled_last_block = False
+            return data
+
+        self._enabled_last_block = True
+        frames = len(data)
+        combined = np.concatenate((self._history, data), axis=0)
+        history_frames = len(self._history)
+        wet = np.zeros_like(data, dtype=np.float32)
+        for delay, gain in zip(self.delays, self.gains):
+            start = history_frames - delay
+            wet += combined[start:start + frames] * gain
+        wet /= self._gain_total
+
+        # A little crossfeed gives stereo microphones a wider room sound while
+        # mono devices remain unchanged.
+        if self.channels >= 2:
+            crossed = wet.copy()
+            crossed[:, 0] = wet[:, 0] * 0.82 + wet[:, 1] * 0.18
+            crossed[:, 1] = wet[:, 1] * 0.82 + wet[:, 0] * 0.18
+            wet = crossed
+
+        self._history = combined[-history_frames:].copy()
+        wet_mix = amount * 0.58
+        dry_gain = 1.0 - amount * 0.12
+        return np.clip(data * dry_gain + wet * wet_mix, -1.0, 1.0)
+
+
 @dataclass(frozen=True, slots=True)
 class CaptureOption:
     index: int
@@ -246,6 +340,7 @@ class AudioEngine:
         self,
         gain: GainControl | None = None,
         program_gain: GainControl | None = None,
+        reverb: ReverbControl | None = None,
     ) -> None:
         self._meter_stream: sd.InputStream | None = None
         self._meter_program_source: PcmAudioSource | None = None
@@ -254,6 +349,7 @@ class AudioEngine:
         self._operation_lock = threading.Lock()
         self.gain = gain or GainControl()
         self.program_gain = program_gain or GainControl()
+        self.reverb = reverb or ReverbControl()
         self.active_api = ""
 
     def start_meter(
@@ -270,6 +366,7 @@ class AudioEngine:
                     self.gain,
                     audio_system,
                     self.program_gain,
+                    self.reverb,
                 )
                 source.start()
                 with self._lock:
@@ -297,15 +394,25 @@ class AudioEngine:
                 thread.start()
                 return
 
+            effect: SimpleReverb | None = None
+
             def receive(
                 data: np.ndarray,
                 _frames: int,
                 _time: object,
                 _status: object,
             ) -> None:
+                nonlocal effect
                 if data.size == 0:
                     return
                 adjusted = self.gain.apply(data)
+                if effect is None:
+                    effect = SimpleReverb(
+                        device.sample_rate,
+                        data.shape[1],
+                        self.reverb,
+                    )
+                adjusted = effect.apply(adjusted)
                 rms = np.sqrt(
                     np.mean(np.square(adjusted.astype(np.float64)), axis=0)
                 )
@@ -362,6 +469,7 @@ class AudioEngine:
                 self.gain,
                 audio_system,
                 self.program_gain,
+                self.reverb,
             )
             source.start()
             frames: list[np.ndarray] = []
@@ -418,8 +526,18 @@ class AudioEngine:
         started = time.monotonic()
         last_remaining = seconds
 
+        effect: SimpleReverb | None = None
+
         def receive(data: np.ndarray, _frames: int, _time: object, _status: object) -> None:
+            nonlocal effect
             adjusted = self.gain.apply(data)
+            if effect is None:
+                effect = SimpleReverb(
+                    device.sample_rate,
+                    data.shape[1],
+                    self.reverb,
+                )
+            adjusted = effect.apply(adjusted)
             frames.append(adjusted)
             if level_callback and adjusted.size:
                 levels = np.sqrt(
@@ -488,10 +606,12 @@ class BroadcastAudioSource:
         device: AudioDevice,
         gain: GainControl | None = None,
         audio_system: str = "Automatic",
+        reverb: ReverbControl | None = None,
     ) -> None:
         self.device = device
         self.gain = gain or GainControl()
         self.audio_system = audio_system
+        self.reverb = reverb or ReverbControl()
         self.blocks: queue.Queue[bytes] = queue.Queue(maxsize=64)
         self.stream: sd.InputStream | None = None
         self.levels = (0.0, 0.0)
@@ -502,8 +622,18 @@ class BroadcastAudioSource:
         self.active_api = ""
 
     def start(self) -> None:
+        effect: SimpleReverb | None = None
+
         def receive(data: np.ndarray, _frames: int, _time: object, _status: object) -> None:
+            nonlocal effect
             adjusted = self.gain.apply(data)
+            if effect is None:
+                effect = SimpleReverb(
+                    self.sample_rate,
+                    data.shape[1],
+                    self.reverb,
+                )
+            adjusted = effect.apply(adjusted)
             rms = np.sqrt(
                 np.mean(np.square(adjusted.astype(np.float64)), axis=0)
             )
@@ -551,6 +681,7 @@ def create_audio_source(
     gain: GainControl | None = None,
     audio_system: str = "Automatic",
     program_gain: GainControl | None = None,
+    reverb: ReverbControl | None = None,
 ) -> PcmAudioSource:
     from .program_audio import (
         AudioProgram,
@@ -562,7 +693,12 @@ def create_audio_source(
         return ProgramAudioSource(target, gain)
     if isinstance(target, CaptureSelection):
         if target.program is None:
-            return BroadcastAudioSource(target.device, gain, audio_system)
+            return BroadcastAudioSource(
+                target.device,
+                gain,
+                audio_system,
+                reverb,
+            )
         if not isinstance(target.program, AudioProgram):
             raise TypeError("Unsupported program audio source")
         return MixedAudioSource(
@@ -571,7 +707,8 @@ def create_audio_source(
             gain,
             program_gain,
             audio_system,
+            reverb,
         )
     if isinstance(target, AudioDevice):
-        return BroadcastAudioSource(target, gain, audio_system)
+        return BroadcastAudioSource(target, gain, audio_system, reverb)
     raise TypeError("Unsupported audio source")

@@ -10,7 +10,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable
 
-from .audio import GainControl, PcmAudioSource, create_audio_source
+from .audio import (
+    GainControl,
+    PcmAudioSource,
+    ReverbControl,
+    create_audio_source,
+)
 from .encoder import get_ffmpeg_exe
 from .processing import DEFAULT_PROCESSING_PRESET, filter_arguments
 
@@ -162,12 +167,14 @@ class RecordingEngine:
         gain: GainControl | None = None,
         device_resolver: Callable[[object], object] | None = None,
         program_gain: GainControl | None = None,
+        reverb: ReverbControl | None = None,
     ) -> None:
         self.state_callback = state_callback
         self.level_callback = level_callback
         self.gain = gain or GainControl()
         self.device_resolver = device_resolver or (lambda device: device)
         self.program_gain = program_gain or GainControl()
+        self.reverb = reverb or ReverbControl()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._source: PcmAudioSource | None = None
@@ -238,6 +245,7 @@ class RecordingEngine:
                 self.gain,
                 audio_system,
                 self.program_gain,
+                self.reverb,
             )
             self._source = source
             source.start()

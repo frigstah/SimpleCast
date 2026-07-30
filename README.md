@@ -44,6 +44,8 @@ adjacent `_internal` directory.
   running applications, including their child processes
 - Simultaneous recording-device and per-program mixing for karaoke, with
   independent 0–200% volume controls
+- Live adjustable microphone-only reverb with a clear on/off control and
+  0–100% amount slider; optional program audio remains dry
 - Live stereo level meter with quiet and clipping guidance
 - Five-second original/processed record-and-playback sound check
 - Named Icecast 2, SHOUTcast 1, and SHOUTcast 2-compatible server profiles

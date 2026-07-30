@@ -148,6 +148,22 @@ class ServerProfileTests(unittest.TestCase):
             "Off / Original",
         )
 
+    def test_reverb_settings_are_validated(self) -> None:
+        config = AppConfig.from_dict(
+            {
+                "reverb_enabled": True,
+                "reverb_amount_percent": 125,
+            }
+        )
+        self.assertTrue(config.reverb_enabled)
+        self.assertEqual(config.reverb_amount_percent, 100)
+        self.assertEqual(
+            AppConfig.from_dict(
+                {"reverb_amount_percent": "invalid"}
+            ).reverb_amount_percent,
+            25,
+        )
+
     def test_single_server_configuration_is_migrated_to_enabled_list(self) -> None:
         server = ServerProfile(host="radio.example")
         config = AppConfig.from_dict(

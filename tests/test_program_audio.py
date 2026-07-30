@@ -6,6 +6,7 @@ from simplecast.audio import (
     AudioDevice,
     CaptureSelection,
     GainControl,
+    ReverbControl,
     create_audio_source,
 )
 from simplecast.program_audio import (
@@ -54,14 +55,17 @@ class ProgramAudioTests(unittest.TestCase):
         program = AudioProgram(42, "KaraFun", r"C:\Apps\KaraFun.exe")
         device_gain = GainControl(80)
         program_gain = GainControl(120)
+        reverb = ReverbControl(True, 40)
         source = create_audio_source(
             CaptureSelection(device, program),
             device_gain,
             program_gain=program_gain,
+            reverb=reverb,
         )
         self.assertIsInstance(source, MixedAudioSource)
         self.assertIs(source.device_gain, device_gain)
         self.assertIs(source.program_gain, program_gain)
+        self.assertIs(source.reverb, reverb)
         self.assertEqual(source.channels, 2)
 
     def test_mixer_adds_device_and_program_audio_and_clips_safely(self) -> None:

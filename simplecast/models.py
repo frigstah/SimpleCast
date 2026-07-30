@@ -101,6 +101,8 @@ class AppConfig:
     audio_system: str = "Automatic"
     input_volume_percent: int = 100
     program_volume_percent: int = 100
+    reverb_enabled: bool = False
+    reverb_amount_percent: int = 25
     processing_preset: str = "Off / Original"
     recording_folder: str = ""
     record_broadcasts: bool = False
@@ -156,6 +158,12 @@ class AppConfig:
             "Mixed content",
         }:
             processing_preset = "Off / Original"
+        try:
+            reverb_amount_percent = int(
+                value.get("reverb_amount_percent", 25)
+            )
+        except (TypeError, ValueError):
+            reverb_amount_percent = 25
         metadata_format = str(value.get("metadata_format", "As written"))
         if metadata_format not in {
             "As written",
@@ -243,6 +251,11 @@ class AppConfig:
                 0,
                 min(200, int(value.get("program_volume_percent", 100))),
             ),
+            reverb_enabled=bool(value.get("reverb_enabled", False)),
+            reverb_amount_percent=max(
+                0,
+                min(100, reverb_amount_percent),
+            ),
             processing_preset=processing_preset,
             recording_folder=str(value.get("recording_folder", "")),
             record_broadcasts=bool(value.get("record_broadcasts", False)),
@@ -278,6 +291,8 @@ class AppConfig:
             "audio_system": self.audio_system,
             "input_volume_percent": self.input_volume_percent,
             "program_volume_percent": self.program_volume_percent,
+            "reverb_enabled": self.reverb_enabled,
+            "reverb_amount_percent": self.reverb_amount_percent,
             "processing_preset": self.processing_preset,
             "recording_folder": self.recording_folder,
             "record_broadcasts": self.record_broadcasts,

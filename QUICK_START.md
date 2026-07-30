@@ -40,6 +40,10 @@ On the **Dashboard**:
 4. Speak or play audio and watch the **L** and **R** meters.
 5. Balance **Recording device volume** and **Program audio volume** until vocals
    and backing music are both clear without spending much time in red.
+6. For vocals, optionally turn on **Microphone reverb** and move its amount
+   slider to taste. Start around 20–30%. Reverb affects only the recording
+   device, so backing audio from Chrome, Spotify, KaraFun, or another selected
+   program stays dry.
 
 The VU meter, sound test, recordings, processing, and broadcast all receive the
 same mixed signal. If the meters do not move, press **Refresh** and choose the
@@ -53,6 +57,9 @@ audio requires Windows build 20348 or newer; Windows 11 is recommended.
 3. Use **Play original** to hear the captured signal.
 4. Choose a **Processing** preset and use **Play processed** to hear what will
    be sent.
+
+Microphone reverb is captured before the optional Processing preset, so it is
+present in both sound-test previews when enabled.
 
 Good starting choices:
 

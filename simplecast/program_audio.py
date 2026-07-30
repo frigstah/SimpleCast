@@ -13,7 +13,12 @@ from pathlib import Path
 
 import numpy as np
 
-from .audio import AudioDevice, BroadcastAudioSource, GainControl
+from .audio import (
+    AudioDevice,
+    BroadcastAudioSource,
+    GainControl,
+    ReverbControl,
+)
 
 
 PROCESS_LOOPBACK_MINIMUM_BUILD = 20348
@@ -488,12 +493,14 @@ class MixedAudioSource:
         device_gain: GainControl | None = None,
         program_gain: GainControl | None = None,
         audio_system: str = "Automatic",
+        reverb: ReverbControl | None = None,
     ) -> None:
         self.device = device
         self.program = program
         self.device_gain = device_gain or GainControl()
         self.program_gain = program_gain or GainControl()
         self.audio_system = audio_system
+        self.reverb = reverb or ReverbControl()
         self.blocks: queue.Queue[bytes] = queue.Queue(maxsize=64)
         self.levels = (0.0, 0.0)
         self.peak_level = 0.0
@@ -543,6 +550,7 @@ class MixedAudioSource:
             self.device,
             self.device_gain,
             self.audio_system,
+            self.reverb,
         )
         try:
             device_source.start()

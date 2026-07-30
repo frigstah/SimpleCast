@@ -217,7 +217,12 @@ def run_readiness_checks(
             "Pass" if format_ready else "Fail",
             (
                 f"{config.quality}, {config.output_sample_rate / 1000:g} kHz, "
-                f"{config.processing_preset}"
+                f"{config.processing_preset}, microphone reverb "
+                + (
+                    f"{config.reverb_amount_percent}%"
+                    if config.reverb_enabled
+                    else "off"
+                )
             ),
         )
     )
