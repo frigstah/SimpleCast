@@ -93,6 +93,7 @@ class AppConfig:
     selected_program_name: str = ""
     selected_program_path: str = ""
     selected_program_window: str = ""
+    show_all_program_audio_sources: bool = False
     selected_server_id: str = ""
     enabled_server_ids: list[str] = field(default_factory=list)
     favorite_server_ids: list[str] = field(default_factory=list)
@@ -237,6 +238,9 @@ class AppConfig:
             selected_program_window=str(
                 value.get("selected_program_window", "")
             ),
+            show_all_program_audio_sources=bool(
+                value.get("show_all_program_audio_sources", False)
+            ),
             selected_server_id=selected_server_id,
             enabled_server_ids=enabled_server_ids,
             favorite_server_ids=favorite_server_ids,
@@ -283,6 +287,9 @@ class AppConfig:
             "selected_program_name": self.selected_program_name,
             "selected_program_path": self.selected_program_path,
             "selected_program_window": self.selected_program_window,
+            "show_all_program_audio_sources": (
+                self.show_all_program_audio_sources
+            ),
             "selected_server_id": self.selected_server_id,
             "enabled_server_ids": self.enabled_server_ids,
             "favorite_server_ids": self.favorite_server_ids,

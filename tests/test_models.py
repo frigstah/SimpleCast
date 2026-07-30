@@ -83,6 +83,16 @@ class ServerProfileTests(unittest.TestCase):
             ).program_audio_enabled
         )
 
+    def test_show_all_program_audio_sources_is_advanced_opt_in(self) -> None:
+        self.assertFalse(
+            AppConfig.from_dict({}).show_all_program_audio_sources
+        )
+        self.assertTrue(
+            AppConfig.from_dict(
+                {"show_all_program_audio_sources": True}
+            ).show_all_program_audio_sources
+        )
+
     def test_invalid_startup_delay_uses_safe_default(self) -> None:
         self.assertEqual(
             AppConfig.from_dict({"startup_delay_seconds": 0}).startup_delay_seconds,
@@ -255,6 +265,7 @@ class ConfigStoreTests(unittest.TestCase):
                 metadata_file=r"D:\Automation\now-playing.txt",
                 metadata_auto=True,
                 metadata_format="Artist - Title (first two lines)",
+                show_all_program_audio_sources=True,
                 start_with_windows=True,
                 start_minimized=True,
                 minimize_to_tray=True,
@@ -281,6 +292,7 @@ class ConfigStoreTests(unittest.TestCase):
                 r"D:\Automation\now-playing.txt",
             )
             self.assertTrue(loaded.metadata_auto)
+            self.assertTrue(loaded.show_all_program_audio_sources)
             self.assertEqual(
                 loaded.metadata_format,
                 "Artist - Title (first two lines)",

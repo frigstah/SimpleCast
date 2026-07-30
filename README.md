@@ -40,8 +40,11 @@ adjacent `_internal` directory.
 ## MVP capabilities
 
 - Windows microphone/line input selection
-- Per-program Windows WASAPI capture for Chrome, Spotify, KaraFun, and other
-  running applications, including their child processes
+- Per-program Windows WASAPI capture with a focused default list of recognized
+  browsers, karaoke programs, music services, and media players, including
+  their child processes
+- An advanced opt-in setting to show every capturable process; previously
+  selected uncommon programs remain available after an upgrade
 - Simultaneous recording-device and per-program mixing for karaoke, with
   independent 0–200% volume controls
 - Live adjustable microphone-only reverb with a clear on/off control and
@@ -51,8 +54,10 @@ adjacent `_internal` directory.
 - Named Icecast 2, SHOUTcast 1, and SHOUTcast 2-compatible server profiles
 - Dashboard server dropdown with direct Add, Edit, Delete, and advanced Manage
   stations actions
-- A full Stations page for favorites, multi-destination inclusion, editing,
-  connection testing, and deletion
+- A full Stations page with directly clickable favorite stars, clearly labeled
+  multi-stream inclusion, editing, connection testing, and deletion
+- Server-only import from a user-selected BUTT configuration export, with a
+  safe preview, exact-duplicate detection, and Windows credential storage
 - Six persistent favorite-station shortcuts
 - Simultaneous broadcasting to multiple included server profiles
 - TLS, host, port, mount, username, password, and SHOUTcast SID support

@@ -50,6 +50,11 @@ same mixed signal. If the meters do not move, press **Refresh** and choose the
 sources again. The selected program must be open and playing audio. Program
 audio requires Windows build 20348 or newer; Windows 11 is recommended.
 
+By default, the Program audio list shows recognized browsers, karaoke tools,
+music services, and media players. If an uncommon application is missing, open
+**Settings → Program audio source list** and enable **Show every capturable
+process (advanced)**, then return to the Dashboard and press **Refresh**.
+
 ## 3. Test your sound
 
 1. Press **Test my sound**.
@@ -76,6 +81,13 @@ Good starting choices:
 3. Enter the details from your radio host.
 4. Press **Save station**.
 
+If you already exported your settings from BUTT, open **Manage stations** and
+choose **Import BUTT export…**. Select the export file and review the preview
+before confirming. SimpleCast imports only the named SHOUTcast and Icecast
+server profiles and their source passwords. It ignores BUTT's audio, recording,
+processing, metadata, and interface settings. Importing the same file again
+skips exact duplicates.
+
 Common Icecast fields:
 
 - **Server address:** for example `radio.example.com`
@@ -100,15 +112,20 @@ currently on air.
 SimpleCast can show up to six favorites on the Dashboard:
 
 1. Open **Manage stations**.
-2. Select a station.
-3. Press **★ Favorite**.
-4. Repeat for up to six stations.
+2. Click **☆ Add favorite** directly in the station's Favorite column.
+3. Repeat for up to six stations.
+
+You can still select a station and press **★ Favorite** if you prefer using
+the button.
 
 Clicking a favorite tile on the Dashboard makes it the destination for the next
 broadcast. A check mark shows the selected favorite.
 
-To broadcast to several servers at the same time, use **Manage stations** and
-mark each required server as **Included**.
+The **Include / exclude for multi-streaming** button is separate from
+favorites. Use it when you want the same live audio sent to several servers at
+the same time. Every station marked **Included** in the **MULTI-STREAM** column
+will receive the broadcast. If only one destination is needed, include only
+that station.
 
 **Manage stations** opens the full **Stations** page. You can also reach that
 page directly from the Stations navigation tab.

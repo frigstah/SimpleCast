@@ -10,6 +10,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 import numpy as np
 
@@ -24,6 +25,69 @@ from .audio import (
 PROCESS_LOOPBACK_MINIMUM_BUILD = 20348
 PROCESS_LOOPBACK_SAMPLE_RATE = 44100
 PROCESS_LOOPBACK_CHANNELS = 2
+
+# Executable names are normalized to lowercase letters and numbers before
+# matching. Browsers are included because services such as YouTube Music and
+# SoundCloud commonly run in a browser or an installed browser PWA.
+KNOWN_AUDIO_PROGRAM_KEYS = frozenset(
+    {
+        # Browsers
+        "arc",
+        "brave",
+        "chrome",
+        "chromium",
+        "duckduckgo",
+        "firefox",
+        "floorp",
+        "librewolf",
+        "maxthon",
+        "msedge",
+        "opera",
+        "operagx",
+        "vivaldi",
+        "waterfox",
+        "yandex",
+        "yandexbrowser",
+        # Karaoke
+        "karafun",
+        "karafunplayer",
+        "openkj",
+        "sigloskaraokeplayerrecorder",
+        "vanbasco",
+        # Music and streaming applications
+        "amazonmusic",
+        "applemusic",
+        "deezer",
+        "itunes",
+        "musicui",
+        "plexamp",
+        "qobuz",
+        "soundcloud",
+        "spotify",
+        "tidal",
+        "youtubemusic",
+        # Common local media players
+        "aimp",
+        "foobar2000",
+        "mediamonkey",
+        "microsoftmediaplayer",
+        "musicbee",
+        "potplayer",
+        "vlc",
+        "winamp",
+        "wmplayer",
+    }
+)
+
+KNOWN_AUDIO_TITLE_PHRASES = (
+    "apple music",
+    "kara fun",
+    "karafun",
+    "soundcloud",
+    "spotify",
+    "tidal",
+    "youtube music",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +107,44 @@ class AudioProgram:
         if len(label) > 92:
             label = f"{label[:89]}…"
         return label
+
+
+def is_known_audio_program(program: AudioProgram) -> bool:
+    candidates = (
+        program.name,
+        Path(program.executable).stem,
+    )
+    if any(
+        _program_key(value) in KNOWN_AUDIO_PROGRAM_KEYS
+        for value in candidates
+    ):
+        return True
+    title = " ".join(program.window_title.casefold().split())
+    return any(phrase in title for phrase in KNOWN_AUDIO_TITLE_PHRASES)
+
+
+def filter_audio_programs(
+    programs: Iterable[AudioProgram],
+    *,
+    include_all: bool = False,
+    always_include_paths: Iterable[str] = (),
+) -> list[AudioProgram]:
+    items = list(programs)
+    if include_all:
+        return items
+    preserved = {
+        path.casefold()
+        for path in always_include_paths
+        if path
+    }
+    return [
+        program
+        for program in items
+        if (
+            is_known_audio_program(program)
+            or program.executable.casefold() in preserved
+        )
+    ]
 
 
 def process_loopback_supported() -> bool:
@@ -160,8 +262,12 @@ def _list_processes() -> list[tuple[int, int, str]]:
     return results
 
 
-def list_audio_programs() -> list[AudioProgram]:
-    """Return visible desktop programs suitable for process-loopback capture."""
+def list_audio_programs(
+    *,
+    include_all: bool = False,
+    always_include_paths: Iterable[str] = (),
+) -> list[AudioProgram]:
+    """Return running programs suitable for process-loopback capture."""
 
     if os.name != "nt":
         return []
@@ -266,9 +372,14 @@ def list_audio_programs() -> list[AudioProgram]:
             name=Path(executable).stem or Path(fallback_name).stem,
             executable=executable,
         )
-    return sorted(
+    ordered = sorted(
         programs.values(),
         key=lambda item: (item.name.casefold(), item.window_title.casefold()),
+    )
+    return filter_audio_programs(
+        ordered,
+        include_all=include_all,
+        always_include_paths=always_include_paths,
     )
 
 
@@ -276,7 +387,11 @@ def resolve_audio_program(
     original: AudioProgram,
     programs: list[AudioProgram] | None = None,
 ) -> AudioProgram:
-    available = programs if programs is not None else list_audio_programs()
+    available = (
+        programs
+        if programs is not None
+        else list_audio_programs(include_all=True)
+    )
     exact = next(
         (
             item
@@ -317,6 +432,14 @@ def _helper_path() -> Path:
         / "native"
         / "bin"
         / "simplecast-process-loopback.exe"
+    )
+
+
+def _program_key(value: str) -> str:
+    return "".join(
+        character
+        for character in value.casefold()
+        if character.isalnum()
     )
 
 

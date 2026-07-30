@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 from simplecast.app import (
     COLORS,
+    StationManagerPage,
     WS_CAPTION,
     WS_MAXIMIZEBOX,
     WS_MINIMIZEBOX,
@@ -15,6 +16,7 @@ from simplecast.app import (
     WS_THICKFRAME,
     SimpleCastApp,
 )
+from simplecast.butt_import import ButtServer, ButtServerExport
 from simplecast.models import AppConfig, ServerProfile
 
 
@@ -112,6 +114,174 @@ class RecordingFolderBehaviorTests(unittest.TestCase):
 
             self.assertTrue(destination.is_dir())
             startfile.assert_called_once_with(str(destination))
+
+
+class ButtImportBehaviorTests(unittest.TestCase):
+    def test_first_import_selects_only_butts_previous_station(self) -> None:
+        first = ButtServer(
+            ServerProfile(
+                name="First",
+                server_type="shoutcast1",
+                host="one.example",
+            ).normalized(),
+            "first-secret",
+        )
+        previous = ButtServer(
+            ServerProfile(
+                name="Previously selected",
+                server_type="icecast2",
+                host="two.example",
+                mount="/live",
+            ).normalized(),
+            "second-secret",
+        )
+        export = ButtServerExport(
+            servers=(first, previous),
+            selected_server_name="Previously selected",
+        )
+        store = Mock()
+        app = SimpleNamespace(
+            stream=SimpleNamespace(active=False),
+            config=AppConfig(),
+            store=store,
+            save_config=Mock(),
+            refresh_station=Mock(),
+        )
+        page = SimpleNamespace(app=app, refresh=Mock())
+
+        with (
+            patch(
+                "simplecast.app.filedialog.askopenfilename",
+                return_value="BUTT export",
+            ),
+            patch(
+                "simplecast.app.load_butt_server_export",
+                return_value=export,
+            ),
+            patch("simplecast.app.messagebox.askyesno", return_value=True),
+            patch("simplecast.app.messagebox.showinfo"),
+        ):
+            StationManagerPage.import_butt_export(page)
+
+        self.assertEqual(len(app.config.servers), 2)
+        self.assertEqual(app.config.selected_server_id, previous.profile.id)
+        self.assertEqual(
+            app.config.enabled_server_ids,
+            [previous.profile.id],
+        )
+        self.assertEqual(store.set_password.call_count, 2)
+        app.save_config.assert_called_once_with()
+        page.refresh.assert_called_once_with()
+        app.refresh_station.assert_called_once_with()
+
+    def test_import_keeps_an_existing_broadcast_selection(self) -> None:
+        current = ServerProfile(
+            name="Current",
+            host="current.example",
+        ).normalized()
+        imported = ButtServer(
+            ServerProfile(
+                name="Imported",
+                server_type="shoutcast1",
+                host="new.example",
+            ).normalized(),
+            "new-secret",
+        )
+        config = AppConfig(
+            selected_server_id=current.id,
+            enabled_server_ids=[current.id],
+            servers=[current],
+        )
+        store = Mock()
+        store.get_password.return_value = "current-secret"
+        app = SimpleNamespace(
+            stream=SimpleNamespace(active=False),
+            config=config,
+            store=store,
+            save_config=Mock(),
+            refresh_station=Mock(),
+        )
+        page = SimpleNamespace(app=app, refresh=Mock())
+
+        with (
+            patch(
+                "simplecast.app.filedialog.askopenfilename",
+                return_value="BUTT export",
+            ),
+            patch(
+                "simplecast.app.load_butt_server_export",
+                return_value=ButtServerExport(servers=(imported,)),
+            ),
+            patch("simplecast.app.messagebox.askyesno", return_value=True),
+            patch("simplecast.app.messagebox.showinfo"),
+        ):
+            StationManagerPage.import_butt_export(page)
+
+        self.assertEqual(app.config.selected_server_id, current.id)
+        self.assertEqual(app.config.enabled_server_ids, [current.id])
+        self.assertEqual(len(app.config.servers), 2)
+
+
+class StationFavoriteBehaviorTests(unittest.TestCase):
+    def test_clicking_favorite_cell_toggles_that_station_directly(self) -> None:
+        station = ServerProfile(name="Direct favorite")
+        tree = Mock()
+        tree.identify_region.return_value = "cell"
+        tree.identify_column.return_value = "#2"
+        tree.identify_row.return_value = station.id
+        toggle = Mock()
+        page = SimpleNamespace(
+            app=SimpleNamespace(
+                config=AppConfig(servers=[station]),
+            ),
+            tree=tree,
+            _toggle_favorite_profile=toggle,
+        )
+
+        result = StationManagerPage._tree_clicked(
+            page,
+            SimpleNamespace(x=100, y=40),
+        )
+
+        self.assertEqual(result, "break")
+        tree.selection_set.assert_called_once_with(station.id)
+        tree.focus.assert_called_once_with(station.id)
+        toggle.assert_called_once_with(station)
+
+    def test_favorite_profile_can_be_added_and_removed(self) -> None:
+        station = ServerProfile(name="Favorite")
+        app = SimpleNamespace(
+            config=AppConfig(servers=[station]),
+            save_config=Mock(),
+            refresh_station=Mock(),
+        )
+        page = SimpleNamespace(app=app, refresh=Mock())
+
+        StationManagerPage._toggle_favorite_profile(page, station)
+        self.assertEqual(
+            app.config.favorite_server_ids,
+            [station.id],
+        )
+
+        StationManagerPage._toggle_favorite_profile(page, station)
+        self.assertEqual(app.config.favorite_server_ids, [])
+        self.assertEqual(app.save_config.call_count, 2)
+        self.assertEqual(page.refresh.call_count, 2)
+        self.assertEqual(app.refresh_station.call_count, 2)
+
+    def test_double_clicking_favorite_cell_does_not_open_editor(self) -> None:
+        tree = Mock()
+        tree.identify_region.return_value = "cell"
+        tree.identify_column.return_value = "#2"
+        page = SimpleNamespace(tree=tree, edit=Mock())
+
+        result = StationManagerPage._tree_double_clicked(
+            page,
+            SimpleNamespace(x=100, y=40),
+        )
+
+        self.assertEqual(result, "break")
+        page.edit.assert_not_called()
 
 
 class MiniModeBehaviorTests(unittest.TestCase):
@@ -243,6 +413,24 @@ class ProgramVolumeBehaviorTests(unittest.TestCase):
             text="135%",
             style="Card.TLabel",
         )
+
+
+class ProgramSourceListBehaviorTests(unittest.TestCase):
+    def test_advanced_process_list_setting_saves_and_refreshes(self) -> None:
+        app = SimpleNamespace(
+            config=SimpleNamespace(show_all_program_audio_sources=False),
+            show_all_program_audio_sources_var=Mock(
+                get=Mock(return_value=True)
+            ),
+            save_config=Mock(),
+            refresh_devices=Mock(),
+        )
+
+        SimpleCastApp._program_audio_list_setting_changed(app)
+
+        self.assertTrue(app.config.show_all_program_audio_sources)
+        app.save_config.assert_called_once_with()
+        app.refresh_devices.assert_called_once_with()
 
 
 class SoundTestBehaviorTests(unittest.TestCase):

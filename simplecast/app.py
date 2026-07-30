@@ -26,6 +26,12 @@ from .audio import (
     ReverbControl,
     list_input_devices,
 )
+from .butt_import import (
+    ButtImportError,
+    ButtServer,
+    exclude_existing_butt_servers,
+    load_butt_server_export,
+)
 from .config_store import ConfigStore
 from .diagnostics import DiagnosticStep, run_server_diagnostic
 from .logging_setup import configure_logging
@@ -665,11 +671,16 @@ class StationManagerPage(ttk.Frame):
             style="Accent.TButton",
             command=lambda: ServerDialog(self.app, None, "", self._save),
         ).pack(side="right")
+        ttk.Button(
+            heading,
+            text="Import BUTT export…",
+            command=self.import_butt_export,
+        ).pack(side="right", padx=(0, 8))
         ttk.Label(
             frame,
             text=(
-                "Choose favorites and include one or more destinations "
-                "in the next broadcast."
+                "Click a star to favorite a station. Included stations receive "
+                "the same broadcast together through multi-streaming."
             ),
             style="Muted.TLabel",
         ).pack(anchor="w", pady=(4, 16))
@@ -691,21 +702,27 @@ class StationManagerPage(ttk.Frame):
         self.tree.heading("type", text="CONNECTION")
         self.tree.heading("address", text="ADDRESS")
         self.tree.heading("listeners", text="PERSONAL HIGH")
-        self.tree.heading("status", text="BROADCAST")
+        self.tree.heading("status", text="MULTI-STREAM")
         self.tree.column("name", width=145)
-        self.tree.column("favorite", width=78, anchor="center")
+        self.tree.column("favorite", width=112, anchor="center")
         self.tree.column("type", width=105)
         self.tree.column("address", width=205)
         self.tree.column("listeners", width=105, anchor="center")
-        self.tree.column("status", width=95, anchor="center")
+        self.tree.column("status", width=110, anchor="center")
         self.tree.pack(fill="both", expand=True)
-        self.tree.bind("<Double-1>", lambda _event: self.edit())
+        self.tree.bind("<Button-1>", self._tree_clicked)
+        self.tree.bind("<Double-1>", self._tree_double_clicked)
+        self.tree.bind("<Motion>", self._tree_motion)
+        self.tree.bind(
+            "<Leave>",
+            lambda _event: self.tree.configure(cursor=""),
+        )
 
         actions = ttk.Frame(frame)
         actions.pack(fill="x", pady=(14, 0))
         ttk.Button(
             actions,
-            text="Include / exclude",
+            text="Include / exclude for multi-streaming",
             command=self.toggle_enabled,
         ).pack(side="left")
         ttk.Button(
@@ -723,6 +740,183 @@ class StationManagerPage(ttk.Frame):
             return None
         server_id = selection[0]
         return next((item for item in self.app.config.servers if item.id == server_id), None)
+
+    def _tree_clicked(self, event: tk.Event) -> str | None:
+        if (
+            self.tree.identify_region(event.x, event.y) != "cell"
+            or self.tree.identify_column(event.x) != "#2"
+        ):
+            return None
+        server_id = self.tree.identify_row(event.y)
+        profile = next(
+            (
+                item
+                for item in self.app.config.servers
+                if item.id == server_id
+            ),
+            None,
+        )
+        if profile is None:
+            return "break"
+        self.tree.selection_set(server_id)
+        self.tree.focus(server_id)
+        self._toggle_favorite_profile(profile)
+        return "break"
+
+    def _tree_double_clicked(self, event: tk.Event) -> str | None:
+        if (
+            self.tree.identify_region(event.x, event.y) == "cell"
+            and self.tree.identify_column(event.x) == "#2"
+        ):
+            return "break"
+        self.edit()
+        return None
+
+    def _tree_motion(self, event: tk.Event) -> None:
+        clickable = (
+            self.tree.identify_region(event.x, event.y) == "cell"
+            and self.tree.identify_column(event.x) == "#2"
+        )
+        self.tree.configure(cursor="hand2" if clickable else "")
+
+    def import_butt_export(self) -> None:
+        if self.app.stream.active:
+            messagebox.showinfo(
+                "Stop broadcasting first",
+                "Stop the current broadcast before importing server profiles.",
+                parent=self.app,
+            )
+            return
+        path = filedialog.askopenfilename(
+            parent=self.app,
+            title="Import servers from a BUTT export",
+            initialdir=str(Path.home() / "Documents"),
+            filetypes=(
+                ("BUTT export files", "*"),
+                ("Configuration files", "*.ini *.cfg *.conf"),
+                ("All files", "*.*"),
+            ),
+        )
+        if not path:
+            return
+        try:
+            export = load_butt_server_export(path)
+        except ButtImportError as exc:
+            messagebox.showerror(
+                "Could not import BUTT servers",
+                str(exc),
+                parent=self.app,
+            )
+            return
+
+        existing = tuple(
+            ButtServer(
+                profile=server,
+                password=self.app.store.get_password(server.id),
+            )
+            for server in self.app.config.servers
+        )
+        additions, duplicate_count = exclude_existing_butt_servers(
+            export.servers,
+            existing,
+        )
+        if not additions:
+            detail = (
+                f"{duplicate_count} exact duplicate"
+                f"{'s were' if duplicate_count != 1 else ' was'} skipped."
+                if duplicate_count
+                else "No supported server profiles were found."
+            )
+            if export.skipped:
+                detail += f"\n{len(export.skipped)} unusable entries were skipped."
+            messagebox.showinfo(
+                "No new servers to import",
+                detail,
+                parent=self.app,
+            )
+            return
+
+        shoutcast_count = sum(
+            item.profile.server_type == "shoutcast1"
+            for item in additions
+        )
+        icecast_count = sum(
+            item.profile.server_type == "icecast2"
+            for item in additions
+        )
+        preview_names = "\n".join(
+            f"• {item.profile.name}" for item in additions[:10]
+        )
+        if len(additions) > 10:
+            preview_names += f"\n• …and {len(additions) - 10} more"
+        notes = [
+            f"{len(additions)} server profiles are ready to import:",
+            f"{shoutcast_count} SHOUTcast · {icecast_count} Icecast",
+        ]
+        if duplicate_count:
+            notes.append(f"{duplicate_count} exact duplicates will be skipped.")
+        if export.skipped:
+            notes.append(
+                f"{len(export.skipped)} unsupported or invalid entries "
+                "will be skipped."
+            )
+        notes.extend(
+            [
+                "",
+                preview_names,
+                "",
+                (
+                    "Only server connection details and source passwords will "
+                    "be imported. Audio, processing, recording, and interface "
+                    "settings in the BUTT file will be ignored."
+                ),
+                "",
+                (
+                    "Existing broadcast selections will not be changed."
+                    if self.app.config.servers
+                    else (
+                        "The server that was selected in BUTT will become the "
+                        "single selected destination."
+                    )
+                ),
+                "",
+                "Import these servers?",
+            ]
+        )
+        if not messagebox.askyesno(
+            "Import BUTT servers?",
+            "\n".join(notes),
+            parent=self.app,
+        ):
+            return
+
+        had_servers = bool(self.app.config.servers)
+        for item in additions:
+            self.app.config.servers.append(item.profile)
+            self.app.store.set_password(item.profile.id, item.password)
+        if not had_servers:
+            selected = next(
+                (
+                    item.profile
+                    for item in additions
+                    if item.profile.name == export.selected_server_name
+                ),
+                additions[0].profile,
+            )
+            self.app.config.select_only_server(selected.id)
+        self.app.save_config()
+        self.refresh()
+        self.app.refresh_station()
+        messagebox.showinfo(
+            "BUTT servers imported",
+            (
+                f"Imported {len(additions)} server profiles.\n\n"
+                "Their source passwords are stored through Windows Credential "
+                "Manager. You can now edit, test, favorite, or include them "
+                "from the Stations page."
+            ),
+            parent=self.app,
+        )
 
     def refresh(self) -> None:
         for item in self.tree.get_children():
@@ -747,9 +941,9 @@ class StationManagerPage(ttk.Frame):
                 else "☐ Excluded"
             )
             favorite = (
-                "★ Yes"
+                "★ Favorite"
                 if server.id in self.app.config.favorite_server_ids
-                else "☆ No"
+                else "☆ Add favorite"
             )
             self.tree.insert(
                 "",
@@ -828,6 +1022,9 @@ class StationManagerPage(ttk.Frame):
                 parent=self.app,
             )
             return
+        self._toggle_favorite_profile(profile)
+
+    def _toggle_favorite_profile(self, profile: ServerProfile) -> None:
         if profile.id in self.app.config.favorite_server_ids:
             self.app.config.favorite_server_ids.remove(profile.id)
         else:
@@ -3941,6 +4138,34 @@ class SimpleCastApp(tk.Tk):
             wraplength=780,
         ).pack(anchor="w", pady=(5, 0))
 
+        program_audio = self._card(root)
+        program_audio.pack(fill="x", pady=(0, 12))
+        ttk.Label(
+            program_audio,
+            text="Program audio source list",
+            style="CardTitle.TLabel",
+        ).pack(anchor="w")
+        self.show_all_program_audio_sources_var = tk.BooleanVar(
+            value=self.config.show_all_program_audio_sources
+        )
+        ttk.Checkbutton(
+            program_audio,
+            text="Show every capturable process (advanced)",
+            variable=self.show_all_program_audio_sources_var,
+            command=self._program_audio_list_setting_changed,
+            style="Card.TCheckbutton",
+        ).pack(anchor="w", pady=(12, 0))
+        ttk.Label(
+            program_audio,
+            text=(
+                "Off by default. The Source list normally shows recognized "
+                "browsers, karaoke programs, music services, and media players "
+                "instead of every process running on the computer."
+            ),
+            style="CardMuted.TLabel",
+            wraplength=780,
+        ).pack(anchor="w", pady=(5, 0))
+
         metadata = self._card(root)
         metadata.pack(fill="x", pady=(0, 12))
         ttk.Label(
@@ -4365,7 +4590,18 @@ class SimpleCastApp(tk.Tk):
             self.devices = []
             self.sound_hint.configure(text=f"Audio devices unavailable: {error}")
         try:
-            self.programs = list_audio_programs()
+            preserved_programs = (
+                (self.config.selected_program_path,)
+                if (
+                    self.config.program_audio_enabled
+                    and self.config.selected_program_path
+                )
+                else ()
+            )
+            self.programs = list_audio_programs(
+                include_all=self.config.show_all_program_audio_sources,
+                always_include_paths=preserved_programs,
+            )
         except Exception as error:
             logging.exception("Could not enumerate running programs")
             self.programs = []
@@ -4609,6 +4845,13 @@ class SimpleCastApp(tk.Tk):
     def _window_setting_changed(self) -> None:
         self.config.minimize_to_tray = self.minimize_to_tray_var.get()
         self.save_config()
+
+    def _program_audio_list_setting_changed(self) -> None:
+        self.config.show_all_program_audio_sources = (
+            self.show_all_program_audio_sources_var.get()
+        )
+        self.save_config()
+        self.refresh_devices()
 
     def _skin_selected(self, _event: object = None) -> None:
         skin_name = self.skin_var.get()
