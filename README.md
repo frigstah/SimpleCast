@@ -269,6 +269,20 @@ The Windows package includes a pinned FFmpeg 7.1 LGPLv3 executable with its
 license, immutable build record, and corresponding source materials. See
 `THIRD_PARTY_NOTICES.md` and `FFMPEG_SOURCE.md`.
 
+## Project website
+
+The static presentation and download site lives in `website/`. Preview it
+locally from the repository root with:
+
+```powershell
+python -m http.server 4173 --bind 127.0.0.1 --directory website
+```
+
+The site reads the newest non-draft GitHub release to keep its installer,
+portable package, checksum, version, and release-notes links current. The
+GitHub Pages workflow in `.github/workflows/pages.yml` deploys the site after
+website changes reach `main`.
+
 ## License
 
 Copyright (C) 2026 SimpleCast contributors.

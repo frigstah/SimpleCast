@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="SimpleCast is a friendly Windows encoder for broadcasting to Icecast and SHOUTcast without the clutter."
+    >
+    <meta name="theme-color" content="#081017">
+    <meta name="color-scheme" content="dark">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="SimpleCast">
+    <meta property="og:title" content="SimpleCast — Broadcasting without all the fuzz">
+    <meta
+      property="og:description"
+      content="Mix your microphone and program audio, check your levels, and start broadcasting without the clutter."
+    >
+    <meta
+      property="og:image"
+      content="https://frigstah.github.io/SimpleCast/assets/studio-dark-overview.png"
+    >
+    <meta property="og:url" content="https://frigstah.github.io/SimpleCast/">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="canonical" href="https://frigstah.github.io/SimpleCast/">
+    <title>SimpleCast — Broadcasting without all the fuzz</title>
+    <link rel="icon" type="image/png" href="./assets/simplecast-icon.png">
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <div class="site-shell">
+      <header class="site-header" data-nav>
+        <a class="brand" href="#top" aria-label="SimpleCast home">
+          <img src="./assets/simplecast-icon.png" alt="">
+          <span>SimpleCast</span>
+        </a>
+
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#download">Download</a>
+          <a href="#questions">Questions</a>
+        </nav>
+
+        <a
+          class="header-github"
+          href="https://github.com/frigstah/SimpleCast"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="View SimpleCast source on GitHub"
+        >
+          <span>View source</span>
+          <svg aria-hidden="true" viewBox="0 0 20 20">
+            <path d="M7 4h9v9M16 4 5 15"></path>
+          </svg>
+        </a>
+      </header>
+
+      <main id="main">
+        <section class="hero" id="top">
+          <div class="hero-copy reveal">
+            <div class="eyebrow">
+              <span class="status-dot" aria-hidden="true"></span>
+              Windows internet radio, made human
+            </div>
+            <h1>
+              Broadcasting
+              <span>without all</span>
+              <em>the fuzz.</em>
+            </h1>
+            <p class="hero-intro">
+              Mix your microphone and program audio, test the sound, choose a
+              station, and go live. SimpleCast keeps the technical parts close
+              and the complicated parts out of your way.
+            </p>
+
+            <div class="hero-actions">
+              <a
+                class="button button-primary"
+                id="hero-download"
+                data-installer-link
+                href="https://github.com/frigstah/SimpleCast/releases/download/v0.9.0-beta.17/SimpleCast-Setup-0.9.0-beta.17-x64.exe"
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20">
+                  <path d="M10 2v10m0 0 4-4m-4 4L6 8M3 16h14"></path>
+                </svg>
+                <span>
+                  Download for Windows
+                  <small data-version-label>Beta 17 · Installer</small>
+                </span>
+              </a>
+              <a
+                class="button button-quiet"
+                href="#how-it-works"
+              >
+                See how it works
+              </a>
+            </div>
+
+            <ul class="hero-notes" aria-label="Download information">
+              <li>Windows 10 &amp; 11</li>
+              <li>Free and open source</li>
+              <li>No account required</li>
+            </ul>
+          </div>
+
+          <div class="hero-stage reveal" style="--delay: 120ms">
+            <div class="orbit orbit-one" aria-hidden="true"></div>
+            <div class="orbit orbit-two" aria-hidden="true"></div>
+
+            <div class="on-air-tag">
+              <span></span>
+              Ready when you are
+            </div>
+
+            <figure class="app-window">
+              <div class="window-bar">
+                <div class="window-brand">
+                  <img src="./assets/simplecast-icon.png" alt="">
+                  <span>SimpleCast</span>
+                </div>
+                <div class="window-controls" aria-hidden="true">
+                  <i></i><i></i><i></i>
+                </div>
+              </div>
+              <div class="screenshot-wrap">
+                <img
+                  src="./assets/studio-dark-overview.png"
+                  alt="SimpleCast Studio Dark interface showing microphone and program audio mixing, signal meters, stream quality, and broadcast controls."
+                >
+                <div class="screen-glow" aria-hidden="true"></div>
+              </div>
+            </figure>
+
+            <aside class="signal-card" aria-label="Live audio signal illustration">
+              <div class="signal-card-top">
+                <span>INPUT</span>
+                <strong>HEALTHY</strong>
+              </div>
+              <div class="signal-line">
+                <span>L</span>
+                <div class="meter" aria-hidden="true">
+                  <i style="--level: 82%"></i>
+                </div>
+              </div>
+              <div class="signal-line">
+                <span>R</span>
+                <div class="meter" aria-hidden="true">
+                  <i style="--level: 68%"></i>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="signal-ribbon" aria-label="SimpleCast workflow">
+          <div>
+            <span>01</span>
+            Choose your sound
+          </div>
+          <i aria-hidden="true"></i>
+          <div>
+            <span>02</span>
+            Check your levels
+          </div>
+          <i aria-hidden="true"></i>
+          <div>
+            <span>03</span>
+            Start broadcasting
+          </div>
+        </section>
+
+        <section class="section features-section" id="features">
+          <div class="section-heading reveal">
+            <p class="kicker">A calmer control room</p>
+            <h2>Everything you need.<br><em>Nothing you don’t.</em></h2>
+            <p>
+              Simple enough for a first broadcast, capable enough for a busy
+              karaoke night or internet radio station.
+            </p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature feature-wide reveal">
+              <div class="feature-number">01 / MIX</div>
+              <div class="feature-copy">
+                <h3>Two sources.<br>One clean broadcast.</h3>
+                <p>
+                  Blend a microphone or mixer with audio from Chrome, Spotify,
+                  KaraFun, or another Windows program. Each source gets its own
+                  volume control.
+                </p>
+              </div>
+              <div class="mixer-visual" aria-hidden="true">
+                <div class="source-pill">
+                  <span>MIC</span>
+                  Recording device
+                  <b>86%</b>
+                </div>
+                <div class="mix-path">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                </div>
+                <div class="source-pill program-pill">
+                  <span>APP</span>
+                  KaraFun
+                  <b>74%</b>
+                </div>
+                <div class="mix-output">LIVE MIX</div>
+              </div>
+            </article>
+
+            <article class="feature feature-reverb reveal" style="--delay: 70ms">
+              <div class="feature-number">02 / SOUND</div>
+              <h3>Shape the voice, gently.</h3>
+              <p>
+                Add microphone-only reverb, control input volume, and choose a
+                processing preset without changing the backing track.
+              </p>
+              <div class="knob-visual" aria-hidden="true">
+                <div class="knob">
+                  <span></span>
+                </div>
+                <div>
+                  <strong>REVERB</strong>
+                  <small>28% · ON</small>
+                </div>
+              </div>
+            </article>
+
+            <article class="feature feature-stats reveal" style="--delay: 120ms">
+              <div class="feature-number">03 / PEOPLE</div>
+              <h3>Know who is listening.</h3>
+              <p>
+                See live listeners while you broadcast and remember the
+                personal high for every saved station.
+              </p>
+              <div class="listener-visual">
+                <span>LIVE LISTENERS</span>
+                <strong>42</strong>
+                <small>Personal high · 68</small>
+              </div>
+            </article>
+
+            <article class="feature feature-wide feature-stations reveal">
+              <div class="feature-number">04 / DESTINATIONS</div>
+              <div class="station-copy">
+                <h3>Icecast and SHOUTcast, side by side.</h3>
+                <p>
+                  Save stations, mark six favorites, switch destinations
+                  quickly, or broadcast to several servers at once.
+                </p>
+              </div>
+              <div class="station-stack" aria-hidden="true">
+                <div class="station-row active">
+                  <i></i>
+                  <span><b>Friday Karaoke</b>Icecast 2 · /live</span>
+                  <em>ON AIR</em>
+                </div>
+                <div class="station-row">
+                  <i></i>
+                  <span><b>Studio relay</b>SHOUTcast 2 · SID 1</span>
+                  <em>READY</em>
+                </div>
+                <div class="station-row">
+                  <i></i>
+                  <span><b>Community radio</b>Icecast 2 · /main</span>
+                  <em>READY</em>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section steps-section" id="how-it-works">
+          <div class="steps-intro reveal">
+            <p class="kicker">Your shortest route to air</p>
+            <h2>From quiet room<br>to <em>live radio.</em></h2>
+            <p>
+              The workflow reads from left to right and keeps every important
+              decision visible.
+            </p>
+          </div>
+
+          <ol class="steps-list">
+            <li class="reveal">
+              <span>01</span>
+              <div>
+                <h3>Choose your sound</h3>
+                <p>
+                  Select a microphone or mixer. Add one program as a second
+                  source when you need music or karaoke playback.
+                </p>
+              </div>
+            </li>
+            <li class="reveal" style="--delay: 70ms">
+              <span>02</span>
+              <div>
+                <h3>Listen before going live</h3>
+                <p>
+                  Watch the stereo meters, record a five-second sound test, and
+                  compare the original and processed versions.
+                </p>
+              </div>
+            </li>
+            <li class="reveal" style="--delay: 140ms">
+              <span>03</span>
+              <div>
+                <h3>Pick a station and broadcast</h3>
+                <p>
+                  Test the connection, enter the artist and title, then press
+                  one unmistakable Start Broadcast button.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section skins-section">
+          <div class="section-heading section-heading-split reveal">
+            <div>
+              <p class="kicker">Your studio, your way</p>
+              <h2>Four interfaces.<br><em>One simple workflow.</em></h2>
+            </div>
+            <p>
+              Pick a complete skin that suits the room, the operator, and the
+              amount of information you want on screen.
+            </p>
+          </div>
+
+          <div class="skin-deck">
+            <article class="skin-card skin-studio-dark reveal">
+              <div class="skin-preview">
+                <span class="preview-nav"></span>
+                <span class="preview-column"></span>
+                <span class="preview-signal"></span>
+                <span class="preview-column preview-column-right"></span>
+              </div>
+              <div>
+                <span>DEFAULT</span>
+                <h3>Studio Dark</h3>
+                <p>Focused, spacious, and built for a dim control room.</p>
+              </div>
+            </article>
+            <article class="skin-card skin-console reveal" style="--delay: 50ms">
+              <div class="skin-preview">
+                <span class="preview-nav"></span>
+                <span class="preview-column"></span>
+                <span class="preview-signal"></span>
+                <span class="preview-column preview-column-right"></span>
+              </div>
+              <div>
+                <span>DARK</span>
+                <h3>Broadcast Console</h3>
+                <p>A compact, information-rich view for regular operators.</p>
+              </div>
+            </article>
+            <article class="skin-card skin-workspace reveal" style="--delay: 100ms">
+              <div class="skin-preview">
+                <span class="preview-nav"></span>
+                <span class="preview-column"></span>
+                <span class="preview-signal"></span>
+                <span class="preview-column preview-column-right"></span>
+              </div>
+              <div>
+                <span>LIGHT</span>
+                <h3>Studio Workspace</h3>
+                <p>Bright, legible, and comfortable during long sessions.</p>
+              </div>
+            </article>
+            <article class="skin-card skin-classic reveal" style="--delay: 150ms">
+              <div class="skin-preview">
+                <span class="preview-nav"></span>
+                <span class="preview-column"></span>
+                <span class="preview-signal"></span>
+                <span class="preview-column preview-column-right"></span>
+              </div>
+              <div>
+                <span>FAMILIAR</span>
+                <h3>Classic SimpleCast</h3>
+                <p>The original layout, with three appearance variations.</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section trust-section">
+          <div class="trust-card reveal">
+            <div class="trust-mark" aria-hidden="true">
+              <svg viewBox="0 0 80 80">
+                <path d="M40 8 66 18v19c0 17-10 29-26 35C24 66 14 54 14 37V18L40 8Z"></path>
+                <path d="m27 40 8 8 18-19"></path>
+              </svg>
+            </div>
+            <div>
+              <p class="kicker">Open by design</p>
+              <h2>No subscription.<br>No mystery.</h2>
+            </div>
+            <div class="trust-copy">
+              <p>
+                SimpleCast is released under GPL-3.0. The source, build
+                provenance, release notes, and SHA-256 checksums are public.
+              </p>
+              <a
+                href="https://github.com/frigstah/SimpleCast"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Explore the source
+                <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section class="section download-section" id="download">
+          <div class="download-copy reveal">
+            <p class="kicker">Ready to try it?</p>
+            <h2>Your next broadcast<br>starts <em>right here.</em></h2>
+            <p>
+              Install SimpleCast normally, or choose the portable version to
+              run it without installation.
+            </p>
+
+            <div class="release-meta">
+              <div>
+                <span>Current release</span>
+                <strong data-release-name>SimpleCast 0.9.0-beta.17</strong>
+              </div>
+              <div>
+                <span>Published</span>
+                <strong data-release-date>30 July 2026</strong>
+              </div>
+              <div>
+                <span>License</span>
+                <strong>GPL-3.0</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="download-panel reveal" style="--delay: 100ms">
+            <div class="download-panel-head">
+              <img src="./assets/simplecast-icon.png" alt="">
+              <div>
+                <strong>SimpleCast for Windows</strong>
+                <span data-release-badge>Public beta</span>
+              </div>
+              <i class="release-status" title="Release available"></i>
+            </div>
+
+            <a
+              class="download-option primary-download"
+              data-installer-link
+              href="https://github.com/frigstah/SimpleCast/releases/download/v0.9.0-beta.17/SimpleCast-Setup-0.9.0-beta.17-x64.exe"
+            >
+              <span class="download-icon">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 3v12m0 0 5-5m-5 5-5-5M4 21h16"></path>
+                </svg>
+              </span>
+              <span>
+                <strong>Windows installer</strong>
+                <small>Recommended · <b data-installer-size>58 MB</b></small>
+              </span>
+              <em>DOWNLOAD</em>
+            </a>
+
+            <a
+              class="download-option"
+              data-portable-link
+              href="https://github.com/frigstah/SimpleCast/releases/download/v0.9.0-beta.17/SimpleCast-Windows-x64-v0.9.0-beta.17-portable.zip"
+            >
+              <span class="download-icon">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M5 4h14v16H5zM9 4v4h6V4M8 15h8"></path>
+                </svg>
+              </span>
+              <span>
+                <strong>Portable ZIP</strong>
+                <small>No installation · <b data-portable-size>79 MB</b></small>
+              </span>
+              <em>DOWNLOAD</em>
+            </a>
+
+            <div class="download-links">
+              <a
+                data-release-notes-link
+                href="https://github.com/frigstah/SimpleCast/releases/tag/v0.9.0-beta.17"
+              >Release notes</a>
+              <a
+                data-checksum-link
+                href="https://github.com/frigstah/SimpleCast/releases/download/v0.9.0-beta.17/SHA256SUMS-0.9.0-beta.17.txt"
+              >SHA-256 checksums</a>
+              <a
+                href="https://github.com/frigstah/SimpleCast/archive/refs/tags/v0.9.0-beta.17.zip"
+                data-source-link
+              >Source code</a>
+            </div>
+
+            <p class="unsigned-note">
+              <svg aria-hidden="true" viewBox="0 0 20 20">
+                <path d="M10 2 2 17h16L10 2Zm0 5v5m0 2.5v.5"></path>
+              </svg>
+              This beta is unsigned. Windows may show an unknown-publisher or
+              SmartScreen warning.
+            </p>
+          </div>
+        </section>
+
+        <section class="section faq-section" id="questions">
+          <div class="faq-heading reveal">
+            <p class="kicker">Good to know</p>
+            <h2>Questions before<br>you go <em>on air?</em></h2>
+          </div>
+
+          <div class="faq-list reveal" style="--delay: 80ms">
+            <details>
+              <summary>Does SimpleCast support Icecast and SHOUTcast?</summary>
+              <p>
+                Yes. It supports Icecast 2, SHOUTcast 1, and SHOUTcast 2 using
+                its compatible source protocol. You can save several stations
+                and broadcast to multiple included destinations.
+              </p>
+            </details>
+            <details>
+              <summary>Can it mix my microphone with karaoke audio?</summary>
+              <p>
+                Yes. Select a recording device and add a running Windows
+                program such as KaraFun, Chrome, or Spotify. SimpleCast mixes
+                both sources with independent volume controls.
+              </p>
+            </details>
+            <details>
+              <summary>Why does Windows warn about the installer?</summary>
+              <p>
+                The beta is not digitally signed, so Windows can show an
+                unknown-publisher warning. Every release includes checksums and
+                build provenance so the download can be verified.
+              </p>
+            </details>
+            <details>
+              <summary>Will SimpleCast tell me when an update is ready?</summary>
+              <p>
+                Yes. Use the Update button in SimpleCast to check GitHub for a
+                newer published version and download its verified installer.
+              </p>
+            </details>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="footer-brand">
+          <img src="./assets/simplecast-icon.png" alt="">
+          <div>
+            <strong>SimpleCast</strong>
+            <span>Broadcasting without all the fuzz</span>
+          </div>
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/frigstah/SimpleCast">GitHub</a>
+          <a href="https://github.com/frigstah/SimpleCast/blob/main/QUICK_START.md">Quick start</a>
+          <a href="https://github.com/frigstah/SimpleCast/blob/main/docs/PRIVACY.md">Privacy</a>
+          <a href="https://github.com/frigstah/SimpleCast/blob/main/LICENSE">License</a>
+        </div>
+        <p>
+          SimpleCast is developed by DoverSoft.
+          <span>© <b data-year>2026</b></span>
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>
