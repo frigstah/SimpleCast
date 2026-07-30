@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from simplecast.app import (
+    COLORS,
     WS_CAPTION,
     WS_MAXIMIZEBOX,
     WS_MINIMIZEBOX,
@@ -154,6 +155,54 @@ class MiniModeBehaviorTests(unittest.TestCase):
         app.mini_dropdown.geometry.assert_called_once_with(
             "230x160+800+534"
         )
+
+    @staticmethod
+    def _listener_app(
+        online_ids: set[str],
+        counts: dict[str, int],
+        errors: dict[str, str],
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            stream=SimpleNamespace(online_server_ids=online_ids),
+            listener_counts=counts,
+            listener_errors=errors,
+        )
+
+    def test_mini_listener_count_totals_online_servers(self) -> None:
+        app = self._listener_app(
+            {"one", "two"},
+            {"one": 4, "two": 7},
+            {},
+        )
+
+        text, color = SimpleCastApp._mini_listener_status(app)
+
+        self.assertEqual(text, "LISTENERS: 11")
+        self.assertEqual(color, COLORS["accent"])
+
+    def test_mini_listener_count_marks_partial_totals(self) -> None:
+        app = self._listener_app(
+            {"one", "two"},
+            {"one": 4},
+            {"two": "Unavailable"},
+        )
+
+        text, color = SimpleCastApp._mini_listener_status(app)
+
+        self.assertEqual(text, "LISTENERS: 4+")
+        self.assertEqual(color, COLORS["accent"])
+
+    def test_mini_listener_count_reports_unavailable(self) -> None:
+        app = self._listener_app(
+            {"one"},
+            {},
+            {"one": "Unavailable"},
+        )
+
+        text, color = SimpleCastApp._mini_listener_status(app)
+
+        self.assertEqual(text, "LISTENERS: UNAVAILABLE")
+        self.assertEqual(color, COLORS["muted"])
 
 
 class ProgramVolumeBehaviorTests(unittest.TestCase):

@@ -48,7 +48,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "docs\ROADMAP.md") -Destination $
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\CERTIFICATION.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\RELEASE_CHECKLIST.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\PRIVACY.md") -Destination $distRoot
-Copy-Item -LiteralPath (Join-Path $projectRoot "docs\BUILD_PROVENANCE_0.9.0-beta.15.md") -Destination $distRoot
+Copy-Item -LiteralPath (Join-Path $projectRoot "docs\BUILD_PROVENANCE_0.9.0-beta.16.md") -Destination $distRoot
 
 $applicationHash = (Get-FileHash `
   -LiteralPath (Join-Path $distRoot "SimpleCast.exe") `

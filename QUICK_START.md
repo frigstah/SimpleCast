@@ -208,9 +208,10 @@ notification-area tray instead, open **Settings → Window behavior** and enable
 
 Choose **MINI** in the title bar or **Open mini mode** under Window behavior for
 a compact 150×600 broadcaster. Mini mode provides vertical L/R VU meters,
-the live timer and status, a Start/Stop button, and a server chooser. Favorites
-are listed first in the animated server menu. Stop broadcasting before changing
-the selected server. Use the ↗ button to return to the complete interface.
+the live timer, listener count and status, a Start/Stop button, and a server
+chooser. Favorites are listed first in the animated server menu. Stop
+broadcasting before changing the selected server. Use the ↗ button to return
+to the complete interface.
 
 ## Update SimpleCast
 

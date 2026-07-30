@@ -1467,7 +1467,15 @@ class SimpleCastApp(tk.Tk):
             foreground=COLORS["muted"],
             font=("Segoe UI", 7),
         )
-        self.mini_timer_label.pack(pady=(1, 7))
+        self.mini_timer_label.pack(pady=(1, 3))
+        self.mini_listener_label = tk.Label(
+            body,
+            text="LISTENERS: —",
+            background=COLORS["bg"],
+            foreground=COLORS["muted"],
+            font=("Segoe UI Semibold", 7),
+        )
+        self.mini_listener_label.pack(pady=(0, 6))
 
         meter_card = tk.Frame(
             body,
@@ -1502,7 +1510,7 @@ class SimpleCastApp(tk.Tk):
         self.mini_left_meter = VerticalLevelMeter(
             left_channel,
             width=36,
-            height=210,
+            height=280,
             background=COLORS["surface_alt"],
         )
         self.mini_left_meter.pack()
@@ -1516,7 +1524,7 @@ class SimpleCastApp(tk.Tk):
         self.mini_right_meter = VerticalLevelMeter(
             right_channel,
             width=36,
-            height=210,
+            height=280,
             background=COLORS["surface_alt"],
         )
         self.mini_right_meter.pack()
@@ -1794,8 +1802,35 @@ class SimpleCastApp(tk.Tk):
         self.mini_signal_detail.configure(
             text=" + ".join(source_parts) if source_parts else "No audio input"
         )
+        self._refresh_mini_listener_status()
         if self._mini_dropdown_open:
             self._refresh_mini_server_menu()
+
+    def _mini_listener_status(self) -> tuple[str, str]:
+        online_ids = set(self.stream.online_server_ids)
+        if not online_ids:
+            return "LISTENERS: —", COLORS["muted"]
+        counts = [
+            self.listener_counts[server_id]
+            for server_id in online_ids
+            if server_id in self.listener_counts
+        ]
+        if counts:
+            suffix = "+" if len(counts) < len(online_ids) else ""
+            return f"LISTENERS: {sum(counts)}{suffix}", COLORS["accent"]
+        if any(
+            server_id not in self.listener_errors
+            for server_id in online_ids
+        ):
+            return "LISTENERS: CHECKING", COLORS["warning"]
+        return "LISTENERS: UNAVAILABLE", COLORS["muted"]
+
+    def _refresh_mini_listener_status(self) -> None:
+        label = getattr(self, "mini_listener_label", None)
+        if label is None:
+            return
+        text, color = self._mini_listener_status()
+        label.configure(text=text, foreground=color)
 
     def _toggle_mini_server_menu(self) -> None:
         if self._mini_dropdown_open:
@@ -5996,6 +6031,7 @@ class SimpleCastApp(tk.Tk):
                     else COLORS["muted"]
                 ),
             )
+        self._refresh_mini_listener_status()
 
     def _start_listener_poll(self, server: ServerProfile) -> None:
         if server.id in self._listener_polling or self._closing:
