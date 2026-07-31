@@ -1,5 +1,5 @@
 const repository = "frigstah/SimpleCast";
-const fallbackTag = "v0.9.0-beta.19";
+const fallbackTag = "v0.9.0-beta.20";
 
 function all(selector) {
   return Array.from(document.querySelectorAll(selector));
