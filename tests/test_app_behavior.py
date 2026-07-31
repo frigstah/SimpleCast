@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 from simplecast.app import (
     COLORS,
+    SUPPORT_EASTER_EGG,
     StationManagerPage,
     WS_CAPTION,
     WS_MAXIMIZEBOX,
@@ -101,21 +102,61 @@ class WindowChromeTests(unittest.TestCase):
 
         app.after.assert_called_once_with(100, app._minimize_to_tray)
 
-    def test_titlebar_drag_prefers_native_windows_movement(self) -> None:
+    def test_titlebar_drag_records_a_tk_managed_offset(self) -> None:
         app = SimpleNamespace(
             wm_state=Mock(return_value="normal"),
             _resize_hit_test=Mock(return_value=""),
-            _begin_native_window_move=Mock(return_value=True),
-            _titlebar_drag_offset=(12, 18),
+            winfo_x=Mock(return_value=400),
+            winfo_y=Mock(return_value=200),
+            _titlebar_drag_offset=None,
+            _titlebar_drag_position=(1, 1),
         )
 
-        result = SimpleCastApp._titlebar_drag_start(
+        SimpleCastApp._titlebar_drag_start(
+            app,
+            SimpleNamespace(x_root=475, y_root=260),
+        )
+
+        self.assertEqual(app._titlebar_drag_offset, (75, 60))
+        self.assertIsNone(app._titlebar_drag_position)
+
+    def test_titlebar_drag_coalesces_mouse_events(self) -> None:
+        apply_drag = Mock()
+        app = SimpleNamespace(
+            wm_state=Mock(return_value="normal"),
+            _active_resize=None,
+            _titlebar_drag_offset=(75, 60),
+            _titlebar_drag_position=None,
+            _titlebar_drag_job=None,
+            after=Mock(return_value="drag-job"),
+            _apply_titlebar_drag=apply_drag,
+        )
+
+        SimpleCastApp._titlebar_drag_move(
             app,
             SimpleNamespace(x_root=500, y_root=300),
         )
+        SimpleCastApp._titlebar_drag_move(
+            app,
+            SimpleNamespace(x_root=540, y_root=330),
+        )
 
-        self.assertEqual(result, "break")
-        self.assertIsNone(app._titlebar_drag_offset)
+        self.assertEqual(app._titlebar_drag_position, (465, 270))
+        self.assertEqual(app._titlebar_drag_job, "drag-job")
+        app.after.assert_called_once_with(16, apply_drag)
+
+    def test_titlebar_drag_applies_the_latest_position(self) -> None:
+        app = SimpleNamespace(
+            _titlebar_drag_job="drag-job",
+            _titlebar_drag_position=(640, 360),
+            geometry=Mock(),
+        )
+
+        SimpleCastApp._apply_titlebar_drag(app)
+
+        self.assertIsNone(app._titlebar_drag_job)
+        self.assertIsNone(app._titlebar_drag_position)
+        app.geometry.assert_called_once_with("+640+360")
 
     def test_startup_height_grows_to_fit_dashboard(self) -> None:
         app = SimpleNamespace(
@@ -130,6 +171,36 @@ class WindowChromeTests(unittest.TestCase):
         height = SimpleCastApp._startup_height_for_dashboard(app, 900)
 
         self.assertEqual(height, 1025)
+
+    def test_missing_brand_assets_use_generated_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            missing = Path(folder) / "missing"
+            with (
+                patch(
+                    "simplecast.app._resource_path",
+                    side_effect=lambda *_parts: missing,
+                ),
+                self.assertLogs(level="WARNING") as captured,
+            ):
+                image = SimpleCastApp._load_brand_image(24)
+
+        self.assertEqual(image.size, (24, 24))
+        self.assertEqual(image.mode, "RGBA")
+        self.assertIsNotNone(image.getbbox())
+        self.assertTrue(
+            any(
+                "using a generated fallback" in message
+                for message in captured.output
+            )
+        )
+
+
+class SupportPageTests(unittest.TestCase):
+    def test_quality_control_credit_is_kept_verbatim(self) -> None:
+        self.assertEqual(
+            SUPPORT_EASTER_EGG,
+            "“Elite QC, supporter and onboarder: Urban Harvy”",
+        )
 
 
 class RecordingFolderBehaviorTests(unittest.TestCase):

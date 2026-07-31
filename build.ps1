@@ -38,6 +38,23 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $distRoot = Join-Path $projectRoot "dist\SimpleCast"
+$requiredBundleFiles = @(
+  "SimpleCast.exe",
+  "_internal\assets\simplecast-icon.png",
+  "_internal\assets\simplecast.ico",
+  "_internal\vendor\ffmpeg\ffmpeg.exe",
+  "_internal\native\simplecast-process-loopback.exe"
+)
+foreach ($relativePath in $requiredBundleFiles) {
+  $requiredPath = Join-Path $distRoot $relativePath
+  if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+    throw "Required packaged file is missing: $relativePath"
+  }
+  if ((Get-Item -LiteralPath $requiredPath).Length -le 0) {
+    throw "Required packaged file is empty: $relativePath"
+  }
+}
+
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "QUICK_START.md") -Destination $distRoot
 Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination $distRoot

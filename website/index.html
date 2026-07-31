@@ -41,6 +41,7 @@
         <nav class="main-nav" aria-label="Main navigation">
           <a href="#features">Features</a>
           <a href="#how-it-works">How it works</a>
+          <a href="#start-guide">New user guide</a>
           <a href="#download">Download</a>
           <a href="#questions">Questions</a>
         </nav>
@@ -316,6 +317,149 @@
               </div>
             </li>
           </ol>
+        </section>
+
+        <section
+          class="section guide-section"
+          id="start-guide"
+          aria-labelledby="guide-title"
+        >
+          <div class="guide-heading reveal">
+            <p class="kicker">Start here — no studio experience needed</p>
+            <div>
+              <h2 id="guide-title">Choose the setup<br>that sounds like <em>you.</em></h2>
+              <p>
+                Follow one short path, check three green lights, and you are
+                ready for your first broadcast. The technical words can wait.
+              </p>
+            </div>
+          </div>
+
+          <div class="guide-paths">
+            <article class="guide-path guide-path-radio reveal">
+              <header>
+                <span class="path-icon" aria-hidden="true">
+                  <svg viewBox="0 0 32 32">
+                    <path d="M16 21a5 5 0 0 0 5-5V8a5 5 0 0 0-10 0v8a5 5 0 0 0 5 5Z"></path>
+                    <path d="M7 15v1a9 9 0 0 0 18 0v-1M16 25v5M11 30h10"></path>
+                  </svg>
+                </span>
+                <div>
+                  <span class="path-label">PATH 01 · RADIO</span>
+                  <h3>Microphone or mixer</h3>
+                  <p>For talk radio, a live DJ, interviews, or a complete mix coming from a mixer.</p>
+                </div>
+              </header>
+              <ol>
+                <li>
+                  <span>1</span>
+                  <p><strong>Choose Recording device.</strong> Select your microphone, USB interface, or mixer.</p>
+                </li>
+                <li>
+                  <span>2</span>
+                  <p><strong>Watch the L and R meters.</strong> Speak normally and keep most peaks out of the red.</p>
+                </li>
+                <li>
+                  <span>3</span>
+                  <p><strong>Test your sound.</strong> Record five seconds and listen before anyone else does.</p>
+                </li>
+                <li>
+                  <span>4</span>
+                  <p><strong>Add and test your station.</strong> Use the details supplied by your radio host.</p>
+                </li>
+              </ol>
+              <a href="https://github.com/frigstah/SimpleCast/blob/main/QUICK_START.md#2-choose-your-sound">
+                Read the radio setup
+                <span aria-hidden="true">↗</span>
+              </a>
+            </article>
+
+            <article class="guide-path guide-path-karaoke reveal" style="--delay: 90ms">
+              <header>
+                <span class="path-icon" aria-hidden="true">
+                  <svg viewBox="0 0 32 32">
+                    <path d="M13 21 25 9M20 7l5 5M11 23l-2 5 5-2 12-12a4 4 0 0 0-6-6L8 20l3 3Z"></path>
+                    <path d="M19 24c2 0 3 1 3 3s1 3 3 3M5 9h8M9 5v8"></path>
+                  </svg>
+                </span>
+                <div>
+                  <span class="path-label">PATH 02 · KARAOKE</span>
+                  <h3>Voice plus backing track</h3>
+                  <p>For karaoke with a live microphone and music from KaraFun, a browser, or another audio app.</p>
+                </div>
+              </header>
+              <ol>
+                <li>
+                  <span>1</span>
+                  <p><strong>Choose Recording device.</strong> Select the microphone used by the singer or host.</p>
+                </li>
+                <li>
+                  <span>2</span>
+                  <p><strong>Choose Program audio.</strong> Start playback, refresh the list, and select KaraFun or your music app.</p>
+                </li>
+                <li>
+                  <span>3</span>
+                  <p><strong>Balance both volume sliders.</strong> Make the voice clear without drowning out the backing track.</p>
+                </li>
+                <li>
+                  <span>4</span>
+                  <p><strong>Test the complete mix.</strong> The sound test hears the same combined signal your listeners will hear.</p>
+                </li>
+              </ol>
+              <a href="https://github.com/frigstah/SimpleCast/blob/main/QUICK_START.md#2-choose-your-sound">
+                Read the karaoke setup
+                <span aria-hidden="true">↗</span>
+              </a>
+            </article>
+          </div>
+
+          <aside class="ready-board reveal" style="--delay: 80ms">
+            <div class="ready-board-title">
+              <span>BEFORE YOU PRESS START</span>
+              <strong>Three green lights</strong>
+            </div>
+            <ul>
+              <li>
+                <i aria-hidden="true"></i>
+                <span><strong>Sound</strong>Your meters move when you speak or play music.</span>
+              </li>
+              <li>
+                <i aria-hidden="true"></i>
+                <span><strong>Station</strong>The correct server is selected and its connection test passes.</span>
+              </li>
+              <li>
+                <i aria-hidden="true"></i>
+                <span><strong>Quality</strong>SL Standard · MP3 128 kbps · 48 kHz is a safe place to begin.</span>
+              </li>
+            </ul>
+            <a
+              class="guide-full-link"
+              href="https://github.com/frigstah/SimpleCast/blob/main/QUICK_START.md"
+            >
+              Open the complete beginner guide
+              <svg aria-hidden="true" viewBox="0 0 20 20">
+                <path d="M7 4h9v9M16 4 5 15"></path>
+              </svg>
+            </a>
+          </aside>
+
+          <div class="plain-words reveal" aria-label="Plain-language broadcasting terms">
+            <span>Three useful words</span>
+            <dl>
+              <div>
+                <dt>Mount</dt>
+                <dd>The stream path used by an Icecast station, such as <code>/live</code>.</dd>
+              </div>
+              <div>
+                <dt>SID</dt>
+                <dd>The Stream ID that tells SHOUTcast 2 which stream you want to use.</dd>
+              </div>
+              <div>
+                <dt>Bitrate</dt>
+                <dd>Sound quality and data use. Start with 128 kbps if you are unsure.</dd>
+              </div>
+            </dl>
+          </div>
         </section>
 
         <section class="section skins-section">

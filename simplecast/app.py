@@ -14,7 +14,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 
 from . import __version__
 from .audio import (
@@ -270,8 +270,6 @@ CUSTOM_RESIZE_MARGIN = 7
 MINI_MODE_WIDTH = 150
 MINI_MODE_HEIGHT = 600
 MINI_SERVER_MENU_WIDTH = 230
-WM_NCLBUTTONDOWN = 0x00A1
-HTCAPTION = 2
 WS_CAPTION = 0x00C00000
 WS_THICKFRAME = 0x00040000
 WS_MINIMIZEBOX = 0x00020000
@@ -280,6 +278,9 @@ WS_SYSMENU = 0x00080000
 FOOTER_TAGLINE = (
     "SimpleCast is developed by DoverSoft, please provide feedback if you "
     "encounter issues"
+)
+SUPPORT_EASTER_EGG = (
+    "“Elite QC, supporter and onboarder: Urban Harvy”"
 )
 
 SAMPLE_RATES = {
@@ -1207,6 +1208,9 @@ class SimpleCastApp(tk.Tk):
         self._normal_window_minsize = (minimum_width, minimum_height)
         self._normal_window_maxsize = self.maxsize()
         self._normal_window_resizable = self.resizable()
+        self._titlebar_drag_offset: tuple[int, int] | None = None
+        self._titlebar_drag_position: tuple[int, int] | None = None
+        self._titlebar_drag_job: str | None = None
         self._closing = False
         self._restart_requested = False
         self._launched_by_windows = "--startup" in sys.argv[1:]
@@ -1321,16 +1325,71 @@ class SimpleCastApp(tk.Tk):
         cached = self._brand_images.get(size)
         if cached is not None:
             return cached
-        with Image.open(
-            _resource_path("assets", "simplecast-icon.png")
-        ) as source:
-            resized = source.convert("RGBA").resize(
-                (size, size),
-                Image.Resampling.LANCZOS,
-            )
+        resized = self._load_brand_image(size)
         photo = ImageTk.PhotoImage(resized)
         self._brand_images[size] = photo
         return photo
+
+    @staticmethod
+    def _load_brand_image(size: int) -> Image.Image:
+        for filename in ("simplecast-icon.png", "simplecast.ico"):
+            path = _resource_path("assets", filename)
+            try:
+                with Image.open(path) as source:
+                    return source.convert("RGBA").resize(
+                        (size, size),
+                        Image.Resampling.LANCZOS,
+                    )
+            except OSError as error:
+                logging.warning(
+                    "Could not load bundled brand image %s: %s",
+                    path,
+                    error,
+                )
+        logging.warning(
+            "Bundled brand images are unavailable; using a generated fallback"
+        )
+        return SimpleCastApp._generated_brand_image(size)
+
+    @staticmethod
+    def _generated_brand_image(size: int) -> Image.Image:
+        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        accent = COLORS["accent"]
+        center = size / 2
+        dot_radius = max(1, round(size * 0.09))
+        line_width = max(1, round(size * 0.08))
+        draw.ellipse(
+            (
+                center - dot_radius,
+                center - dot_radius,
+                center + dot_radius,
+                center + dot_radius,
+            ),
+            fill=accent,
+        )
+        for radius in (size * 0.25, size * 0.40):
+            bounds = (
+                center - radius,
+                center - radius,
+                center + radius,
+                center + radius,
+            )
+            draw.arc(
+                bounds,
+                300,
+                60,
+                fill=accent,
+                width=line_width,
+            )
+            draw.arc(
+                bounds,
+                120,
+                240,
+                fill=accent,
+                width=line_width,
+            )
+        return image
 
     def _build_custom_titlebar(self, parent: tk.Misc) -> None:
         bar = tk.Frame(
@@ -1427,42 +1486,21 @@ class SimpleCastApp(tk.Tk):
         for widget in (bar, icon, title, drag_area):
             widget.bind("<ButtonPress-1>", self._titlebar_drag_start)
             widget.bind("<B1-Motion>", self._titlebar_drag_move)
+            widget.bind("<ButtonRelease-1>", self._titlebar_drag_end)
             widget.bind("<Double-Button-1>", self._toggle_maximize)
 
-    def _titlebar_drag_start(self, event: tk.Event) -> str | None:
+    def _titlebar_drag_start(self, event: tk.Event) -> None:
         if (
             self.wm_state() == "zoomed"
             or self._resize_hit_test(event) != ""
         ):
-            return None
-        if self._begin_native_window_move():
             self._titlebar_drag_offset = None
-            return "break"
+            return
         self._titlebar_drag_offset = (
             event.x_root - self.winfo_x(),
             event.y_root - self.winfo_y(),
         )
-        return None
-
-    def _begin_native_window_move(self) -> bool:
-        if platform.system() != "Windows":
-            return False
-        hwnd = getattr(self, "_custom_window_handle", None)
-        if not hwnd:
-            return False
-        try:
-            user32 = ctypes.windll.user32
-            user32.ReleaseCapture()
-            user32.SendMessageW(
-                hwnd,
-                WM_NCLBUTTONDOWN,
-                HTCAPTION,
-                0,
-            )
-            return True
-        except (AttributeError, OSError, ValueError):
-            logging.exception("Could not start native Windows window movement")
-            return False
+        self._titlebar_drag_position = None
 
     def _titlebar_drag_move(self, event: tk.Event) -> None:
         if (
@@ -1473,9 +1511,30 @@ class SimpleCastApp(tk.Tk):
         offset = getattr(self, "_titlebar_drag_offset", None)
         if offset is None:
             return
-        self.geometry(
-            f"+{event.x_root - offset[0]}+{event.y_root - offset[1]}"
+        self._titlebar_drag_position = (
+            event.x_root - offset[0],
+            event.y_root - offset[1],
         )
+        if self._titlebar_drag_job is None:
+            self._titlebar_drag_job = self.after(
+                16,
+                self._apply_titlebar_drag,
+            )
+
+    def _apply_titlebar_drag(self) -> None:
+        self._titlebar_drag_job = None
+        position = self._titlebar_drag_position
+        if position is None:
+            return
+        self._titlebar_drag_position = None
+        self.geometry(f"+{position[0]}+{position[1]}")
+
+    def _titlebar_drag_end(self, _event: tk.Event) -> None:
+        if self._titlebar_drag_job is not None:
+            self.after_cancel(self._titlebar_drag_job)
+            self._titlebar_drag_job = None
+        self._apply_titlebar_drag()
+        self._titlebar_drag_offset = None
 
     def _toggle_maximize(self, _event: object = None) -> None:
         if self._mini_active:
@@ -1705,6 +1764,7 @@ class SimpleCastApp(tk.Tk):
         for widget in (header, icon, drag):
             widget.bind("<ButtonPress-1>", self._titlebar_drag_start)
             widget.bind("<B1-Motion>", self._titlebar_drag_move)
+            widget.bind("<ButtonRelease-1>", self._titlebar_drag_end)
 
         body = tk.Frame(
             self.mini_frame,
@@ -4415,6 +4475,11 @@ class SimpleCastApp(tk.Tk):
             text="Icecast + SHOUTcast MP3",
             style="CardMuted.TLabel",
         ).pack(side="right")
+        ttk.Label(
+            support,
+            text=SUPPORT_EASTER_EGG,
+            style="CardMuted.TLabel",
+        ).pack(anchor="e", pady=(12, 0))
 
     def _show_page(self, page_name: str) -> None:
         page = self.pages.get(page_name)
