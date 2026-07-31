@@ -270,6 +270,8 @@ CUSTOM_RESIZE_MARGIN = 7
 MINI_MODE_WIDTH = 150
 MINI_MODE_HEIGHT = 600
 MINI_SERVER_MENU_WIDTH = 230
+WM_NCLBUTTONDOWN = 0x00A1
+HTCAPTION = 2
 WS_CAPTION = 0x00C00000
 WS_THICKFRAME = 0x00040000
 WS_MINIMIZEBOX = 0x00020000
@@ -684,8 +686,12 @@ class StationManagerPage(ttk.Frame):
             ),
             style="Muted.TLabel",
         ).pack(anchor="w", pady=(4, 16))
+        station_list = ttk.Frame(frame)
+        station_list.pack(fill="both", expand=True)
+        station_list.columnconfigure(0, weight=1)
+        station_list.rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(
-            frame,
+            station_list,
             columns=(
                 "name",
                 "favorite",
@@ -709,10 +715,19 @@ class StationManagerPage(ttk.Frame):
         self.tree.column("address", width=205)
         self.tree.column("listeners", width=105, anchor="center")
         self.tree.column("status", width=110, anchor="center")
-        self.tree.pack(fill="both", expand=True)
+        self.tree.configure(height=8)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        self.tree_scrollbar = ttk.Scrollbar(
+            station_list,
+            orient="vertical",
+            command=self.tree.yview,
+        )
+        self.tree_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.tree.configure(yscrollcommand=self.tree_scrollbar.set)
         self.tree.bind("<Button-1>", self._tree_clicked)
         self.tree.bind("<Double-1>", self._tree_double_clicked)
         self.tree.bind("<Motion>", self._tree_motion)
+        self.tree.bind("<MouseWheel>", self._scroll_tree, add="+")
         self.tree.bind(
             "<Leave>",
             lambda _event: self.tree.configure(cursor=""),
@@ -733,6 +748,11 @@ class StationManagerPage(ttk.Frame):
         ttk.Button(actions, text="Edit", command=self.edit).pack(side="left", padx=8)
         ttk.Button(actions, text="Test", command=self.test).pack(side="left")
         ttk.Button(actions, text="Delete", command=self.delete).pack(side="left", padx=8)
+
+    def _scroll_tree(self, event: tk.Event) -> str:
+        if event.delta:
+            self.tree.yview_scroll(-1 if event.delta > 0 else 1, "units")
+        return "break"
 
     def selected_profile(self) -> ServerProfile | None:
         selection = self.tree.selection()
@@ -1105,7 +1125,10 @@ class SimpleCastApp(tk.Tk):
             minimum_height += CUSTOM_TITLEBAR_HEIGHT
         self.geometry(f"{preferred_width}x{preferred_height}")
         self.minsize(minimum_width, minimum_height)
-        self.protocol("WM_DELETE_WINDOW", self.close)
+        self.protocol(
+            "WM_DELETE_WINDOW",
+            lambda: self.close("Windows window close"),
+        )
         self.gain = GainControl(self.config.input_volume_percent)
         self.program_gain = GainControl(
             self.config.program_volume_percent
@@ -1169,7 +1192,7 @@ class SimpleCastApp(tk.Tk):
         self.tray = TrayController(
             lambda: self.after(0, self.show_window),
             lambda: self.after(0, self._tray_toggle_broadcast),
-            lambda: self.after(0, self.close),
+            lambda: self.after(0, lambda: self.close("tray menu")),
             lambda: self.stream.active,
         )
         self._volume_save_job: str | None = None
@@ -1207,6 +1230,11 @@ class SimpleCastApp(tk.Tk):
         )
         self.refresh_devices()
         self.refresh_station()
+        self._fit_startup_dashboard_window(
+            preferred_width,
+            minimum_width,
+            minimum_height,
+        )
         self.after(200, self._sync_metadata_watcher)
         self.bind("<Unmap>", self._on_unmap)
         try:
@@ -1333,7 +1361,7 @@ class SimpleCastApp(tk.Tk):
         close_button = tk.Button(
             bar,
             text="×",
-            command=self.close,
+            command=lambda: self.close("title-bar close button"),
             background=COLORS["bg"],
             foreground=COLORS["text"],
             activebackground=COLORS["error"],
@@ -1401,16 +1429,40 @@ class SimpleCastApp(tk.Tk):
             widget.bind("<B1-Motion>", self._titlebar_drag_move)
             widget.bind("<Double-Button-1>", self._toggle_maximize)
 
-    def _titlebar_drag_start(self, event: tk.Event) -> None:
+    def _titlebar_drag_start(self, event: tk.Event) -> str | None:
         if (
             self.wm_state() == "zoomed"
             or self._resize_hit_test(event) != ""
         ):
-            return
+            return None
+        if self._begin_native_window_move():
+            self._titlebar_drag_offset = None
+            return "break"
         self._titlebar_drag_offset = (
             event.x_root - self.winfo_x(),
             event.y_root - self.winfo_y(),
         )
+        return None
+
+    def _begin_native_window_move(self) -> bool:
+        if platform.system() != "Windows":
+            return False
+        hwnd = getattr(self, "_custom_window_handle", None)
+        if not hwnd:
+            return False
+        try:
+            user32 = ctypes.windll.user32
+            user32.ReleaseCapture()
+            user32.SendMessageW(
+                hwnd,
+                WM_NCLBUTTONDOWN,
+                HTCAPTION,
+                0,
+            )
+            return True
+        except (AttributeError, OSError, ValueError):
+            logging.exception("Could not start native Windows window movement")
+            return False
 
     def _titlebar_drag_move(self, event: tk.Event) -> None:
         if (
@@ -1611,7 +1663,7 @@ class SimpleCastApp(tk.Tk):
         close_button = tk.Button(
             header,
             text="×",
-            command=self.close,
+            command=lambda: self.close("mini-mode close button"),
             background=COLORS["sidebar"],
             foreground=COLORS["muted"],
             activebackground=COLORS["error"],
@@ -2663,6 +2715,39 @@ class SimpleCastApp(tk.Tk):
     def _card(self, parent: tk.Misc) -> ttk.Frame:
         return ttk.Frame(parent, padding=16, style="Card.TFrame")
 
+    def _startup_height_for_dashboard(self, preferred_height: int) -> int:
+        """Grow the initial window enough to show the dashboard when possible."""
+        canvas_height = max(1, self.content_canvas.winfo_height())
+        dashboard_height = self.page_host.winfo_reqheight()
+        return preferred_height + max(0, dashboard_height - canvas_height)
+
+    def _fit_startup_dashboard_window(
+        self,
+        preferred_width: int,
+        minimum_width: int,
+        minimum_height: int,
+    ) -> None:
+        """Use available screen space before falling back to page scrolling."""
+        for _attempt in range(2):
+            self.update_idletasks()
+            current_height = self.winfo_height()
+            target_height = self._startup_height_for_dashboard(
+                current_height
+            )
+            if target_height <= current_height + 1:
+                break
+            _fit_window(
+                self,
+                preferred_width,
+                target_height,
+                minimum_width,
+                minimum_height,
+            )
+            if self.winfo_height() <= current_height:
+                break
+        self.update_idletasks()
+        self._sync_content_viewport()
+
     def _build(self) -> None:
         window = ttk.Frame(self)
         self.main_window_frame = window
@@ -2783,20 +2868,25 @@ class SimpleCastApp(tk.Tk):
 
         viewport = ttk.Frame(content)
         viewport.pack(fill="both", expand=True)
+        viewport.columnconfigure(0, weight=1)
+        viewport.rowconfigure(0, weight=1)
         self.content_canvas = tk.Canvas(
             viewport,
             background=COLORS["bg"],
             highlightthickness=0,
             borderwidth=0,
         )
-        scrollbar = ttk.Scrollbar(
+        self.content_scrollbar = ttk.Scrollbar(
             viewport,
             orient="vertical",
             command=self.content_canvas.yview,
         )
-        self.content_canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        self.content_canvas.pack(side="left", fill="both", expand=True)
+        self.content_canvas.configure(
+            yscrollcommand=self.content_scrollbar.set
+        )
+        self.content_canvas.grid(row=0, column=0, sticky="nsew")
+        self.content_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.content_scrollbar.grid_remove()
         self.page_host = ttk.Frame(self.content_canvas, padding=(30, 8, 22, 6))
         self.content_window = self.content_canvas.create_window(
             (0, 0),
@@ -2805,16 +2895,11 @@ class SimpleCastApp(tk.Tk):
         )
         self.page_host.bind(
             "<Configure>",
-            lambda _event: self.content_canvas.configure(
-                scrollregion=self.content_canvas.bbox("all")
-            ),
+            self._content_host_configured,
         )
         self.content_canvas.bind(
             "<Configure>",
-            lambda event: self.content_canvas.itemconfigure(
-                self.content_window,
-                width=event.width,
-            ),
+            self._content_viewport_resized,
         )
         self.bind_all("<MouseWheel>", self._scroll_content, add="+")
         # Tk's default TCombobox class binding changes the selected value when
@@ -2917,20 +3002,25 @@ class SimpleCastApp(tk.Tk):
         content.pack(fill="both", expand=True)
         viewport = ttk.Frame(content)
         viewport.pack(fill="both", expand=True)
+        viewport.columnconfigure(0, weight=1)
+        viewport.rowconfigure(0, weight=1)
         self.content_canvas = tk.Canvas(
             viewport,
             background=COLORS["bg"],
             highlightthickness=0,
             borderwidth=0,
         )
-        scrollbar = ttk.Scrollbar(
+        self.content_scrollbar = ttk.Scrollbar(
             viewport,
             orient="vertical",
             command=self.content_canvas.yview,
         )
-        self.content_canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        self.content_canvas.pack(side="left", fill="both", expand=True)
+        self.content_canvas.configure(
+            yscrollcommand=self.content_scrollbar.set
+        )
+        self.content_canvas.grid(row=0, column=0, sticky="nsew")
+        self.content_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.content_scrollbar.grid_remove()
         self.page_host = ttk.Frame(
             self.content_canvas,
             padding=(28, 14, 20, 8),
@@ -2942,16 +3032,11 @@ class SimpleCastApp(tk.Tk):
         )
         self.page_host.bind(
             "<Configure>",
-            lambda _event: self.content_canvas.configure(
-                scrollregion=self.content_canvas.bbox("all")
-            ),
+            self._content_host_configured,
         )
         self.content_canvas.bind(
             "<Configure>",
-            lambda event: self.content_canvas.itemconfigure(
-                self.content_window,
-                width=event.width,
-            ),
+            self._content_viewport_resized,
         )
         self.bind_all("<MouseWheel>", self._scroll_content, add="+")
         self.bind_class(
@@ -4335,6 +4420,7 @@ class SimpleCastApp(tk.Tk):
         page = self.pages.get(page_name)
         if page is None:
             return
+        self._active_page_name = page_name
         if page_name == "Stations":
             self.station_manager.refresh()
         for current in self.pages.values():
@@ -4357,12 +4443,62 @@ class SimpleCastApp(tk.Tk):
                 )
             )
         self.content_canvas.yview_moveto(0)
-        self.after(
-            0,
-            lambda: self.content_canvas.configure(
-                scrollregion=self.content_canvas.bbox("all")
-            ),
+        self._schedule_content_viewport_sync()
+
+    def _content_host_configured(self, _event: tk.Event) -> None:
+        self._schedule_content_viewport_sync()
+
+    def _content_viewport_resized(self, event: tk.Event) -> None:
+        self.content_canvas.itemconfigure(
+            self.content_window,
+            width=event.width,
         )
+        self._schedule_content_viewport_sync()
+
+    def _schedule_content_viewport_sync(self) -> None:
+        if getattr(self, "_content_layout_job", None) is not None:
+            return
+        self._content_layout_job = self.after_idle(
+            self._sync_content_viewport
+        )
+
+    def _sync_content_viewport(self) -> None:
+        self._content_layout_job = None
+        if not self.content_canvas.winfo_exists():
+            return
+        viewport_width = max(1, self.content_canvas.winfo_width())
+        viewport_height = max(1, self.content_canvas.winfo_height())
+        requested_height = self.page_host.winfo_reqheight()
+        stations_page = (
+            getattr(self, "_active_page_name", "Dashboard") == "Stations"
+        )
+        content_height = (
+            viewport_height
+            if stations_page
+            else max(viewport_height, requested_height)
+        )
+        self.content_canvas.itemconfigure(
+            self.content_window,
+            width=viewport_width,
+            height=content_height,
+        )
+        self.content_canvas.configure(
+            scrollregion=(
+                0,
+                0,
+                max(viewport_width, self.page_host.winfo_reqwidth()),
+                content_height,
+            )
+        )
+        needs_outer_scroll = (
+            not stations_page
+            and content_height > viewport_height + 1
+        )
+        if needs_outer_scroll:
+            self.content_scrollbar.grid()
+        else:
+            self.content_scrollbar.grid_remove()
+            self.content_canvas.yview_moveto(0)
 
     def save_config(self) -> None:
         try:
@@ -4580,7 +4716,7 @@ class SimpleCastApp(tk.Tk):
             )
             return
         logging.info("Verified update installer launched: %s", path.name)
-        self.close()
+        self.close("verified update installer")
 
     def refresh_devices(self) -> None:
         try:
@@ -4947,7 +5083,7 @@ class SimpleCastApp(tk.Tk):
             )
             return
         self._restart_requested = True
-        self.close()
+        self.close("interface skin restart")
 
     @staticmethod
     def _restart_command() -> tuple[list[str], Path]:
@@ -5498,6 +5634,8 @@ class SimpleCastApp(tk.Tk):
             self._start_meter()
 
     def _scroll_content(self, event: tk.Event) -> str | None:
+        if getattr(self, "_active_page_name", "") == "Stations":
+            return None
         widget = self.winfo_containing(event.x_root, event.y_root)
         while widget is not None:
             if widget == self.content_canvas:
@@ -6902,7 +7040,7 @@ class SimpleCastApp(tk.Tk):
         self.show_window()
         self.toggle_broadcast()
 
-    def close(self) -> None:
+    def close(self, source: str = "application request") -> None:
         if self._closing:
             return
         if self.stream.active:
@@ -6920,7 +7058,7 @@ class SimpleCastApp(tk.Tk):
             return
         self._closing = True
         self.cancel_automatic_start()
-        logging.info("Shutdown requested")
+        logging.info("Shutdown requested by %s", source)
         # Disappear immediately. No driver or tray operation is allowed to hold
         # Tk's interface thread while Windows is closing the application.
         self.withdraw()

@@ -101,6 +101,36 @@ class WindowChromeTests(unittest.TestCase):
 
         app.after.assert_called_once_with(100, app._minimize_to_tray)
 
+    def test_titlebar_drag_prefers_native_windows_movement(self) -> None:
+        app = SimpleNamespace(
+            wm_state=Mock(return_value="normal"),
+            _resize_hit_test=Mock(return_value=""),
+            _begin_native_window_move=Mock(return_value=True),
+            _titlebar_drag_offset=(12, 18),
+        )
+
+        result = SimpleCastApp._titlebar_drag_start(
+            app,
+            SimpleNamespace(x_root=500, y_root=300),
+        )
+
+        self.assertEqual(result, "break")
+        self.assertIsNone(app._titlebar_drag_offset)
+
+    def test_startup_height_grows_to_fit_dashboard(self) -> None:
+        app = SimpleNamespace(
+            content_canvas=SimpleNamespace(
+                winfo_height=Mock(return_value=700)
+            ),
+            page_host=SimpleNamespace(
+                winfo_reqheight=Mock(return_value=825)
+            ),
+        )
+
+        height = SimpleCastApp._startup_height_for_dashboard(app, 900)
+
+        self.assertEqual(height, 1025)
+
 
 class RecordingFolderBehaviorTests(unittest.TestCase):
     def test_open_folder_creates_and_opens_configured_location(self) -> None:
@@ -282,6 +312,27 @@ class StationFavoriteBehaviorTests(unittest.TestCase):
 
         self.assertEqual(result, "break")
         page.edit.assert_not_called()
+
+    def test_station_mousewheel_scrolls_only_the_station_list(self) -> None:
+        page = SimpleNamespace(tree=Mock())
+
+        result = StationManagerPage._scroll_tree(
+            page,
+            SimpleNamespace(delta=120),
+        )
+
+        self.assertEqual(result, "break")
+        page.tree.yview_scroll.assert_called_once_with(-1, "units")
+
+    def test_station_page_disables_outer_page_wheel_scrolling(self) -> None:
+        app = SimpleNamespace(_active_page_name="Stations")
+
+        result = SimpleCastApp._scroll_content(
+            app,
+            SimpleNamespace(x_root=100, y_root=100, delta=-120),
+        )
+
+        self.assertIsNone(result)
 
 
 class MiniModeBehaviorTests(unittest.TestCase):
