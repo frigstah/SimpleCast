@@ -265,16 +265,13 @@ SKIN_WINDOW_SIZES = {
 }
 
 COLORS = dict(THEMES["Classic SimpleCast"]["colors"])
-CUSTOM_TITLEBAR_HEIGHT = 32
-CUSTOM_RESIZE_MARGIN = 7
 MINI_MODE_WIDTH = 150
 MINI_MODE_HEIGHT = 600
 MINI_SERVER_MENU_WIDTH = 230
-WS_CAPTION = 0x00C00000
-WS_THICKFRAME = 0x00040000
-WS_MINIMIZEBOX = 0x00020000
-WS_MAXIMIZEBOX = 0x00010000
-WS_SYSMENU = 0x00080000
+DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+DWMWA_BORDER_COLOR = 34
+DWMWA_CAPTION_COLOR = 35
+DWMWA_TEXT_COLOR = 36
 FOOTER_TAGLINE = (
     "SimpleCast is developed by DoverSoft, please provide feedback if you "
     "encounter issues"
@@ -1117,13 +1114,10 @@ class SimpleCastApp(tk.Tk):
         self.title(f"SimpleCast {__version__}")
         self.configure(background=COLORS["bg"])
         self._brand_images: dict[int, ImageTk.PhotoImage] = {}
-        self._custom_chrome_enabled = self._enable_custom_window_chrome()
+        self._native_frame_styled = self._style_native_window_frame()
         preferred_width, preferred_height, minimum_width, minimum_height = (
             SKIN_WINDOW_SIZES[self.active_skin]
         )
-        if self._custom_chrome_enabled:
-            preferred_height += CUSTOM_TITLEBAR_HEIGHT
-            minimum_height += CUSTOM_TITLEBAR_HEIGHT
         self.geometry(f"{preferred_width}x{preferred_height}")
         self.minsize(minimum_width, minimum_height)
         self.protocol(
@@ -1208,9 +1202,6 @@ class SimpleCastApp(tk.Tk):
         self._normal_window_minsize = (minimum_width, minimum_height)
         self._normal_window_maxsize = self.maxsize()
         self._normal_window_resizable = self.resizable()
-        self._titlebar_drag_offset: tuple[int, int] | None = None
-        self._titlebar_drag_position: tuple[int, int] | None = None
-        self._titlebar_drag_job: str | None = None
         self._closing = False
         self._restart_requested = False
         self._launched_by_windows = "--startup" in sys.argv[1:]
@@ -1252,7 +1243,9 @@ class SimpleCastApp(tk.Tk):
         if self._launch_in_mini_mode:
             self.after(250, self.open_mini_mode)
 
-    def _enable_custom_window_chrome(self) -> bool:
+    def _style_native_window_frame(self) -> bool:
+        """Color the Windows-owned frame without replacing its behavior."""
+
         if platform.system() != "Windows":
             return False
         try:
@@ -1266,60 +1259,69 @@ class SimpleCastApp(tk.Tk):
             hwnd = ctypes.c_void_p(
                 parent_handle or self.winfo_id()
             )
-            long_pointer = (
-                ctypes.c_longlong
-                if ctypes.sizeof(ctypes.c_void_p) == 8
-                else ctypes.c_long
-            )
-            get_style = user32.GetWindowLongPtrW
-            get_style.argtypes = [ctypes.c_void_p, ctypes.c_int]
-            get_style.restype = long_pointer
-            set_style = user32.SetWindowLongPtrW
-            set_style.argtypes = [
+            set_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+            set_attribute.argtypes = [
                 ctypes.c_void_p,
-                ctypes.c_int,
-                long_pointer,
-            ]
-            set_style.restype = long_pointer
-            style = int(get_style(hwnd, -16))
-            style = self._integrated_window_style(style)
-            set_style(hwnd, -16, long_pointer(style))
-            set_window_pos = user32.SetWindowPos
-            set_window_pos.argtypes = [
+                ctypes.c_uint,
                 ctypes.c_void_p,
-                ctypes.c_void_p,
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
                 ctypes.c_uint,
             ]
-            set_window_pos.restype = ctypes.c_int
-            set_window_pos(
-                hwnd,
-                None,
-                0,
-                0,
-                0,
-                0,
-                0x0001 | 0x0002 | 0x0004 | 0x0020,
+            set_attribute.restype = ctypes.c_long
+
+            dark_mode = ctypes.c_int(
+                int(SimpleCastApp._is_dark_color(COLORS["bg"]))
             )
-            self._custom_window_handle = hwnd
-            return True
-        except (AttributeError, OSError, ValueError):
-            logging.exception("Could not enable the integrated window frame")
+            caption_color = ctypes.c_uint(
+                SimpleCastApp._colorref(COLORS["bg"])
+            )
+            text_color = ctypes.c_uint(
+                SimpleCastApp._colorref(COLORS["text"])
+            )
+            border_color = ctypes.c_uint(
+                SimpleCastApp._colorref(COLORS["line"])
+            )
+            attributes = (
+                (DWMWA_USE_IMMERSIVE_DARK_MODE, dark_mode),
+                (DWMWA_CAPTION_COLOR, caption_color),
+                (DWMWA_TEXT_COLOR, text_color),
+                (DWMWA_BORDER_COLOR, border_color),
+            )
+            applied = False
+            for attribute, value in attributes:
+                result = set_attribute(
+                    hwnd,
+                    attribute,
+                    ctypes.byref(value),
+                    ctypes.sizeof(value),
+                )
+                applied = applied or result == 0
+            return applied
+        except (AttributeError, OSError, TypeError, ValueError):
+            logging.exception("Could not style the native Windows frame")
             return False
 
     @staticmethod
-    def _integrated_window_style(style: int) -> int:
-        """Keep taskbar controls without asking DWM to paint a native frame."""
+    def _colorref(color: str) -> int:
+        """Convert a CSS-style RGB color to a Win32 COLORREF value."""
 
-        return (
-            (style & ~(WS_CAPTION | WS_THICKFRAME))
-            | WS_MINIMIZEBOX
-            | WS_MAXIMIZEBOX
-            | WS_SYSMENU
+        value = int(color.removeprefix("#"), 16)
+        red = (value >> 16) & 0xFF
+        green = (value >> 8) & 0xFF
+        blue = value & 0xFF
+        return red | (green << 8) | (blue << 16)
+
+    @staticmethod
+    def _is_dark_color(color: str) -> bool:
+        value = int(color.removeprefix("#"), 16)
+        red = (value >> 16) & 0xFF
+        green = (value >> 8) & 0xFF
+        blue = value & 0xFF
+        luminance = (
+            0.2126 * red
+            + 0.7152 * green
+            + 0.0722 * blue
         )
+        return luminance < 128
 
     def _brand_photo(self, size: int) -> ImageTk.PhotoImage:
         cached = self._brand_images.get(size)
@@ -1719,20 +1721,6 @@ class SimpleCastApp(tk.Tk):
             anchor="w",
         )
         drag.pack(side="left", fill="both", expand=True)
-        close_button = tk.Button(
-            header,
-            text="×",
-            command=lambda: self.close("mini-mode close button"),
-            background=COLORS["sidebar"],
-            foreground=COLORS["muted"],
-            activebackground=COLORS["error"],
-            activeforeground=COLORS["error_text"],
-            relief="flat",
-            borderwidth=0,
-            font=("Segoe UI", 11),
-            width=2,
-        )
-        close_button.pack(side="right", fill="y")
         restore_button = tk.Button(
             header,
             text="↗",
@@ -1747,24 +1735,6 @@ class SimpleCastApp(tk.Tk):
             width=2,
         )
         restore_button.pack(side="right", fill="y")
-        minimize_button = tk.Button(
-            header,
-            text="—",
-            command=self.iconify,
-            background=COLORS["sidebar"],
-            foreground=COLORS["muted"],
-            activebackground=COLORS["surface_hover"],
-            activeforeground=COLORS["text"],
-            relief="flat",
-            borderwidth=0,
-            font=("Segoe UI", 9),
-            width=2,
-        )
-        minimize_button.pack(side="right", fill="y")
-        for widget in (header, icon, drag):
-            widget.bind("<ButtonPress-1>", self._titlebar_drag_start)
-            widget.bind("<B1-Motion>", self._titlebar_drag_move)
-            widget.bind("<ButtonRelease-1>", self._titlebar_drag_end)
 
         body = tk.Frame(
             self.mini_frame,
@@ -2021,6 +1991,7 @@ class SimpleCastApp(tk.Tk):
             max(0, self.winfo_screenheight() - MINI_MODE_HEIGHT),
         )
         self._mini_active = True
+        self.title("SimpleCast Mini")
         self.main_window_frame.pack_forget()
         self.mini_frame.pack(fill="both", expand=True)
         self.resizable(False, False)
@@ -2029,8 +2000,7 @@ class SimpleCastApp(tk.Tk):
         self.geometry(
             f"{MINI_MODE_WIDTH}x{MINI_MODE_HEIGHT}+{x}+{y}"
         )
-        if self._custom_chrome_enabled:
-            self._enable_custom_window_chrome()
+        self.after(0, self._style_native_window_frame)
         self._refresh_mini_state()
         self.lift()
 
@@ -2039,6 +2009,7 @@ class SimpleCastApp(tk.Tk):
             return
         self._close_mini_server_menu(immediate=True)
         self._mini_active = False
+        self.title(f"SimpleCast {__version__}")
         self.mini_frame.pack_forget()
         self.main_window_frame.pack(fill="both", expand=True)
         self.maxsize(*self._normal_window_maxsize)
@@ -2046,8 +2017,7 @@ class SimpleCastApp(tk.Tk):
         self.resizable(*self._normal_window_resizable)
         if self._normal_window_geometry:
             self.geometry(self._normal_window_geometry)
-        if self._custom_chrome_enabled:
-            self._enable_custom_window_chrome()
+        self.after(0, self._style_native_window_frame)
         self.lift()
         self.focus_force()
 
@@ -2812,9 +2782,6 @@ class SimpleCastApp(tk.Tk):
         window = ttk.Frame(self)
         self.main_window_frame = window
         window.pack(fill="both", expand=True)
-        if self._custom_chrome_enabled:
-            self._build_custom_titlebar(window)
-            self._bind_custom_resize()
         shell_host = ttk.Frame(window)
         shell_host.pack(fill="both", expand=True)
         if self.active_skin in {"Studio Workspace", "Studio Dark"}:
@@ -2915,6 +2882,12 @@ class SimpleCastApp(tk.Tk):
             text="Broadcasting without all the fuzz",
             style="Muted.TLabel",
         ).pack(anchor="w")
+        ttk.Button(
+            header,
+            text="MINI",
+            style="Compact.TButton",
+            command=self.open_mini_mode,
+        ).pack(side="right", padx=(12, 0))
         status_group = ttk.Frame(header)
         status_group.pack(side="right")
         self.status_label = ttk.Label(
@@ -3030,6 +3003,12 @@ class SimpleCastApp(tk.Tk):
         station_button.pack(side="left", padx=2)
         self.nav_buttons["Stations"] = station_button
 
+        ttk.Button(
+            topbar,
+            text="MINI",
+            style="Compact.TButton",
+            command=self.open_mini_mode,
+        ).pack(side="right", padx=(12, 0))
         status_group = ttk.Frame(topbar)
         status_group.pack(side="right")
         self.status_label = ttk.Label(
@@ -5113,7 +5092,7 @@ class SimpleCastApp(tk.Tk):
         COLORS.update(THEMES[theme_name]["colors"])
         self.configure(background=COLORS["bg"])
         self._configure_styles()
-        self._refresh_custom_titlebar_colors()
+        self._style_native_window_frame()
         self.content_canvas.configure(background=COLORS["bg"])
         self.left_meter.configure(background=COLORS["surface"])
         self.right_meter.configure(background=COLORS["surface"])
@@ -7096,8 +7075,7 @@ class SimpleCastApp(tk.Tk):
     def show_window(self) -> None:
         self.deiconify()
         self.wm_state("normal")
-        if self._custom_chrome_enabled:
-            self.after(0, self._enable_custom_window_chrome)
+        self.after(0, self._style_native_window_frame)
         self.lift()
         self.focus_force()
 

@@ -8,13 +8,12 @@ from unittest.mock import Mock, patch
 
 from simplecast.app import (
     COLORS,
+    DWMWA_BORDER_COLOR,
+    DWMWA_CAPTION_COLOR,
+    DWMWA_TEXT_COLOR,
+    DWMWA_USE_IMMERSIVE_DARK_MODE,
     SUPPORT_EASTER_EGG,
     StationManagerPage,
-    WS_CAPTION,
-    WS_MAXIMIZEBOX,
-    WS_MINIMIZEBOX,
-    WS_SYSMENU,
-    WS_THICKFRAME,
     SimpleCastApp,
 )
 from simplecast.butt_import import ButtServer, ButtServerExport
@@ -63,21 +62,49 @@ class BroadcastStopBehaviorTests(unittest.TestCase):
 
 
 class WindowChromeTests(unittest.TestCase):
-    def test_integrated_style_removes_native_frame_drawing(self) -> None:
-        original = (
-            WS_CAPTION
-            | WS_THICKFRAME
-            | WS_MINIMIZEBOX
-            | WS_MAXIMIZEBOX
-            | WS_SYSMENU
+    def test_colorref_converts_rgb_to_win32_bgr_order(self) -> None:
+        self.assertEqual(
+            SimpleCastApp._colorref("#112233"),
+            0x00332211,
         )
-        styled = SimpleCastApp._integrated_window_style(original)
 
-        self.assertFalse(styled & WS_CAPTION)
-        self.assertFalse(styled & WS_THICKFRAME)
-        self.assertTrue(styled & WS_MINIMIZEBOX)
-        self.assertTrue(styled & WS_MAXIMIZEBOX)
-        self.assertTrue(styled & WS_SYSMENU)
+    def test_titlebar_mode_follows_color_luminance(self) -> None:
+        self.assertTrue(SimpleCastApp._is_dark_color("#081017"))
+        self.assertFalse(SimpleCastApp._is_dark_color("#eff8f7"))
+
+    def test_native_frame_styling_only_calls_dwm(self) -> None:
+        get_parent = Mock(return_value=4321)
+        set_attribute = Mock(return_value=0)
+        windll = SimpleNamespace(
+            user32=SimpleNamespace(GetParent=get_parent),
+            dwmapi=SimpleNamespace(
+                DwmSetWindowAttribute=set_attribute,
+            ),
+        )
+        app = SimpleNamespace(
+            update_idletasks=Mock(),
+            winfo_id=Mock(return_value=1234),
+        )
+
+        with (
+            patch("simplecast.app.platform.system", return_value="Windows"),
+            patch("simplecast.app.ctypes.windll", windll),
+        ):
+            applied = SimpleCastApp._style_native_window_frame(app)
+
+        self.assertTrue(applied)
+        self.assertEqual(
+            [call.args[1] for call in set_attribute.call_args_list],
+            [
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                DWMWA_CAPTION_COLOR,
+                DWMWA_TEXT_COLOR,
+                DWMWA_BORDER_COLOR,
+            ],
+        )
+        self.assertFalse(
+            hasattr(windll.user32, "SetWindowLongPtrW")
+        )
 
     def test_minimize_stays_on_taskbar_by_default(self) -> None:
         app = SimpleNamespace(
@@ -101,62 +128,6 @@ class WindowChromeTests(unittest.TestCase):
         SimpleCastApp._on_unmap(app, object())
 
         app.after.assert_called_once_with(100, app._minimize_to_tray)
-
-    def test_titlebar_drag_records_a_tk_managed_offset(self) -> None:
-        app = SimpleNamespace(
-            wm_state=Mock(return_value="normal"),
-            _resize_hit_test=Mock(return_value=""),
-            winfo_x=Mock(return_value=400),
-            winfo_y=Mock(return_value=200),
-            _titlebar_drag_offset=None,
-            _titlebar_drag_position=(1, 1),
-        )
-
-        SimpleCastApp._titlebar_drag_start(
-            app,
-            SimpleNamespace(x_root=475, y_root=260),
-        )
-
-        self.assertEqual(app._titlebar_drag_offset, (75, 60))
-        self.assertIsNone(app._titlebar_drag_position)
-
-    def test_titlebar_drag_coalesces_mouse_events(self) -> None:
-        apply_drag = Mock()
-        app = SimpleNamespace(
-            wm_state=Mock(return_value="normal"),
-            _active_resize=None,
-            _titlebar_drag_offset=(75, 60),
-            _titlebar_drag_position=None,
-            _titlebar_drag_job=None,
-            after=Mock(return_value="drag-job"),
-            _apply_titlebar_drag=apply_drag,
-        )
-
-        SimpleCastApp._titlebar_drag_move(
-            app,
-            SimpleNamespace(x_root=500, y_root=300),
-        )
-        SimpleCastApp._titlebar_drag_move(
-            app,
-            SimpleNamespace(x_root=540, y_root=330),
-        )
-
-        self.assertEqual(app._titlebar_drag_position, (465, 270))
-        self.assertEqual(app._titlebar_drag_job, "drag-job")
-        app.after.assert_called_once_with(16, apply_drag)
-
-    def test_titlebar_drag_applies_the_latest_position(self) -> None:
-        app = SimpleNamespace(
-            _titlebar_drag_job="drag-job",
-            _titlebar_drag_position=(640, 360),
-            geometry=Mock(),
-        )
-
-        SimpleCastApp._apply_titlebar_drag(app)
-
-        self.assertIsNone(app._titlebar_drag_job)
-        self.assertIsNone(app._titlebar_drag_position)
-        app.geometry.assert_called_once_with("+640+360")
 
     def test_startup_height_grows_to_fit_dashboard(self) -> None:
         app = SimpleNamespace(

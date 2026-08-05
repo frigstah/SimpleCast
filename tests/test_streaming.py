@@ -28,7 +28,7 @@ from simplecast.streaming import (
 class StreamCommandTests(unittest.TestCase):
     @patch("simplecast.streaming.subprocess.Popen")
     @patch("simplecast.streaming.get_ffmpeg_exe")
-    def test_builds_secure_mp3_command(self, ffmpeg, popen) -> None:
+    def test_icecast_uses_mp3_stdout_encoder(self, ffmpeg, popen) -> None:
         ffmpeg.return_value = "ffmpeg.exe"
         popen.return_value = object()
         engine = StreamEngine(lambda *_: None, lambda *_: None)
@@ -44,15 +44,12 @@ class StreamCommandTests(unittest.TestCase):
         )
         engine._start_ffmpeg(source, server, "secret word", "SL MAX unsafe")
         command = popen.call_args.args[0]
-        self.assertIn("-tls", command)
-        self.assertEqual(command[command.index("-tls") + 1], "1")
         self.assertIn("libmp3lame", command)
         output_rate_index = len(command) - 1 - command[::-1].index("-ar")
         self.assertEqual(command[output_rate_index + 1], "44100")
-        self.assertIn(
-            "icecast://source:secret%20word@radio.example:8443/live",
-            command,
-        )
+        self.assertEqual(command[-1], "pipe:1")
+        self.assertNotIn("secret word", " ".join(command))
+        self.assertEqual(popen.call_args.kwargs["stdout"], -1)
 
     def test_stream_engine_accepts_device_reresolver(self) -> None:
         replacement = AudioDevice(21, "Input", 2, 44100)

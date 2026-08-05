@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Callable
-from urllib.parse import quote
 
 from .audio import (
     GainControl,
@@ -19,10 +18,11 @@ from .audio import (
     create_audio_source,
 )
 from .encoder import get_ffmpeg_exe
+from .icecast import open_source as open_icecast_source
 from .models import ServerProfile
 from .processing import DEFAULT_PROCESSING_PRESET, filter_arguments
 from .recording import Mp3FileWriter
-from .shoutcast import open_source
+from .shoutcast import open_source as open_shoutcast_source
 
 
 class BroadcastState(str, Enum):
@@ -79,7 +79,7 @@ class StreamEngine:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._process: subprocess.Popen[bytes] | None = None
-        self._shoutcast_socket: socket.socket | None = None
+        self._connection: socket.socket | None = None
         self.started_at: float | None = None
         self.recording_started_at: float | None = None
         self.recording_path: Path | None = None
@@ -126,7 +126,7 @@ class StreamEngine:
                 process.terminate()
             except OSError:
                 pass
-        connection = self._shoutcast_socket
+        connection = self._connection
         if connection:
             try:
                 connection.shutdown(socket.SHUT_RDWR)
@@ -202,9 +202,18 @@ class StreamEngine:
                         quality,
                         QUALITY_PRESETS["SL Standard"],
                     )
+                    output_channels = preset.channels or source.channels
                     if server.server_type.startswith("shoutcast"):
-                        self._shoutcast_socket = open_source(
+                        self._connection = open_shoutcast_source(
                             server, password, preset.bitrate
+                        )
+                    else:
+                        self._connection = open_icecast_source(
+                            server,
+                            password,
+                            preset.bitrate,
+                            output_sample_rate,
+                            output_channels,
                         )
                     self._process = self._start_ffmpeg(
                         source,
@@ -214,13 +223,13 @@ class StreamEngine:
                         output_sample_rate,
                         processing_preset,
                     )
-                    if self._shoutcast_socket is not None:
+                    if self._connection is not None:
                         assert self._process.stdout is not None
                         threading.Thread(
-                            target=self._pump_shoutcast,
+                            target=self._pump_encoded_audio,
                             args=(
                                 self._process.stdout,
-                                self._shoutcast_socket,
+                                self._connection,
                                 pump_errors,
                             ),
                             daemon=True,
@@ -235,7 +244,9 @@ class StreamEngine:
                         if self._process.poll() is not None:
                             raise RuntimeError(self._ffmpeg_error(self._process))
                         if pump_errors:
-                            raise RuntimeError(f"SHOUTcast connection closed: {pump_errors[0]}")
+                            raise RuntimeError(
+                                f"Server connection closed: {pump_errors[0]}"
+                            )
                         self.level_callback(*source.levels, source.peak_level)
                         try:
                             block = source.blocks.get(timeout=0.25)
@@ -304,12 +315,12 @@ class StreamEngine:
                                 except OSError:
                                     pass
                         self._process = None
-                    if self._shoutcast_socket is not None:
+                    if self._connection is not None:
                         try:
-                            self._shoutcast_socket.close()
+                            self._connection.close()
                         except OSError:
                             pass
-                        self._shoutcast_socket = None
+                        self._connection = None
         finally:
             if recorder is not None:
                 try:
@@ -352,40 +363,6 @@ class StreamEngine:
             QUALITY_PRESETS["SL Standard"],
         )
         channels = preset.channels or source.channels
-        if server.server_type.startswith("shoutcast"):
-            command = [
-                get_ffmpeg_exe(),
-                "-hide_banner",
-                "-loglevel",
-                "warning",
-                "-f",
-                "s16le",
-                "-ar",
-                str(source.sample_rate),
-                "-ac",
-                str(source.channels),
-                "-i",
-                "pipe:0",
-                "-vn",
-                *filter_arguments(processing_preset),
-                "-ac",
-                str(channels),
-                "-ar",
-                str(output_sample_rate),
-                "-codec:a",
-                "libmp3lame",
-                "-b:a",
-                f"{preset.bitrate}k",
-                "-f",
-                "mp3",
-                "pipe:1",
-            ]
-            return self._spawn_ffmpeg(command, stdout=subprocess.PIPE)
-
-        user = quote(server.username, safe="")
-        secret = quote(password, safe="")
-        host = server.host.strip("[]")
-        url = f"icecast://{user}:{secret}@{host}:{server.port}{server.mount}"
         command = [
             get_ffmpeg_exe(),
             "-hide_banner",
@@ -409,23 +386,11 @@ class StreamEngine:
             "libmp3lame",
             "-b:a",
             f"{preset.bitrate}k",
-            "-content_type",
-            "audio/mpeg",
-            "-tls",
-            "1" if server.use_tls else "0",
-            "-ice_name",
-            server.station_name or server.name,
-            "-ice_description",
-            server.description,
-            "-ice_genre",
-            server.genre,
-            "-ice_url",
-            server.website,
             "-f",
             "mp3",
-            url,
+            "pipe:1",
         ]
-        return self._spawn_ffmpeg(command, stdout=subprocess.DEVNULL)
+        return self._spawn_ffmpeg(command, stdout=subprocess.PIPE)
 
     @staticmethod
     def _spawn_ffmpeg(
@@ -443,7 +408,7 @@ class StreamEngine:
         )
 
     @staticmethod
-    def _pump_shoutcast(
+    def _pump_encoded_audio(
         encoded_audio: object,
         connection: socket.socket,
         errors: list[Exception],
@@ -546,11 +511,20 @@ class _ServerWorker:
                     self.quality,
                     QUALITY_PRESETS["SL Standard"],
                 )
+                output_channels = preset.channels or self.audio_format.channels
                 if server.server_type.startswith("shoutcast"):
-                    self._connection = open_source(
+                    self._connection = open_shoutcast_source(
                         server,
                         self.destination.password,
                         preset.bitrate,
+                    )
+                else:
+                    self._connection = open_icecast_source(
+                        server,
+                        self.destination.password,
+                        preset.bitrate,
+                        self.output_sample_rate,
+                        output_channels,
                     )
                 self._process = encoder._start_ffmpeg(
                     self.audio_format,
@@ -563,7 +537,7 @@ class _ServerWorker:
                 if self._connection is not None:
                     assert self._process.stdout is not None
                     threading.Thread(
-                        target=StreamEngine._pump_shoutcast,
+                        target=StreamEngine._pump_encoded_audio,
                         args=(
                             self._process.stdout,
                             self._connection,
@@ -584,7 +558,7 @@ class _ServerWorker:
                         )
                     if pump_errors:
                         raise RuntimeError(
-                            f"SHOUTcast connection closed: {pump_errors[0]}"
+                            f"Server connection closed: {pump_errors[0]}"
                         )
                     try:
                         block = self.blocks.get(timeout=0.25)
